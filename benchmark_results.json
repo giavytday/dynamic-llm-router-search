@@ -1,0 +1,187 @@
+{
+  "meta": {
+    "timestamp": "2026-08-24T17:46:12",
+    "champion_hash": "22e2a1f5",
+    "champion_generation": 10,
+    "champion_island": 2,
+    "n_train": 6000,
+    "n_test": 4000,
+    "n_ood": 832,
+    "sklearn_version": "1.6.1",
+    "ml_model": "DecisionTreeClassifier(max_depth=8, min_samples_leaf=20)",
+    "ml_train_accuracy": 0.7825,
+    "ml_test_accuracy": 0.7722,
+    "latency_definition": "mean wall-clock per select_model(q) call, microseconds (ID split)",
+    "memory_definition": "code-object bytes for policies; pickled model bytes for sklearn"
+  },
+  "results": [
+    {
+      "method": "Always-Frontier",
+      "n_params": 1,
+      "memory_kb": 0.228,
+      "id": {
+        "quality": 0.7208241499999999,
+        "cost_reduction_pct": 0.0,
+        "mean_cost": 0.0026910620000000023,
+        "latency_us": 0.1002855,
+        "n_queries": 6000,
+        "fitness": 72.07740072499999
+      },
+      "ood": {
+        "quality": 0.7762545673076914,
+        "cost_reduction_pct": -32.74365073371371,
+        "mean_cost": 0.003572213942307694,
+        "latency_us": 0.10380769230769231,
+        "n_queries": 832,
+        "fitness": 57.97407590592554
+      }
+    },
+    {
+      "method": "Always-Medium",
+      "n_params": 1,
+      "memory_kb": 0.226,
+      "id": {
+        "quality": 0.6071860999999986,
+        "cost_reduction_pct": 77.56355421515126,
+        "mean_cost": 0.0006037786666666667,
+        "latency_us": 0.09691666666666666,
+        "n_queries": 6000,
+        "fitness": 107.25189669575728
+      },
+      "ood": {
+        "quality": 0.6544438701923083,
+        "cost_reduction_pct": 69.68754628927455,
+        "mean_cost": 0.0008157269230769233,
+        "latency_us": 0.10151322115384616,
+        "n_queries": 832,
+        "fitness": 107.25183913173787
+      }
+    },
+    {
+      "method": "Always-Small",
+      "n_params": 1,
+      "memory_kb": 0.225,
+      "id": {
+        "quality": 0.44899768333333395,
+        "cost_reduction_pct": 95.79316641534089,
+        "mean_cost": 0.00011320849999999935,
+        "latency_us": 0.098008,
+        "n_queries": 6000,
+        "fitness": 102.37076778253794
+      },
+      "ood": {
+        "quality": 0.4850539663461534,
+        "cost_reduction_pct": 94.31641492923897,
+        "mean_cost": 0.000152948798076923,
+        "latency_us": 0.10284975961538462,
+        "n_queries": 832,
+        "fitness": 105.09010310417796
+      }
+    },
+    {
+      "method": "Random-Uniform",
+      "n_params": 0,
+      "memory_kb": 0.32,
+      "id": {
+        "quality": 0.5887511500000008,
+        "cost_reduction_pct": 58.81563084264371,
+        "mean_cost": 0.0011082969083333362,
+        "latency_us": 0.419193,
+        "n_queries": 6000,
+        "fitness": 94.14353385558631
+      },
+      "ood": {
+        "quality": 0.6266408653846148,
+        "cost_reduction_pct": 46.79377956332136,
+        "mean_cost": 0.0014318123798076942,
+        "latency_us": 0.3999254807692308,
+        "n_queries": 832,
+        "fitness": 90.72035800241584
+      }
+    },
+    {
+      "method": "Heuristic-Threshold",
+      "n_params": 6,
+      "memory_kb": 0.808,
+      "id": {
+        "quality": 0.5511953500000001,
+        "cost_reduction_pct": 82.31523341590294,
+        "mean_cost": 0.0004759080333333343,
+        "latency_us": 0.24954583333333333,
+        "n_queries": 6000,
+        "fitness": 104.4961977578751
+      },
+      "ood": {
+        "quality": 0.6660747596153851,
+        "cost_reduction_pct": 60.849260512135245,
+        "mean_cost": 0.0010535706730769238,
+        "latency_us": 0.2448846153846154,
+        "n_queries": 832,
+        "fitness": 103.10478803805043
+      }
+    },
+    {
+      "method": "Hand-Written-Baseline",
+      "n_params": 5,
+      "memory_kb": 0.846,
+      "id": {
+        "quality": 0.5560095833333345,
+        "cost_reduction_pct": 72.35072405119851,
+        "mean_cost": 0.0007440591583333368,
+        "latency_us": 0.1741775,
+        "n_queries": 6000,
+        "fitness": 99.00268388905256
+      },
+      "ood": {
+        "quality": 0.7292387019230759,
+        "cost_reduction_pct": 32.773413075752934,
+        "mean_cost": 0.0018091091346153832,
+        "latency_us": 0.15639302884615383,
+        "n_queries": 832,
+        "fitness": 92.58009838631705
+      }
+    },
+    {
+      "method": "ML-DecisionTree",
+      "n_params": 133,
+      "memory_kb": 12.653,
+      "id": {
+        "quality": 0.7203252833333336,
+        "cost_reduction_pct": 0.468383857376801,
+        "mean_cost": 0.002678457500000001,
+        "latency_us": 67.62380233333334,
+        "n_queries": 6000,
+        "fitness": 68.93236853109276
+      },
+      "ood": {
+        "quality": 0.7760657451923068,
+        "cost_reduction_pct": -32.55608180539298,
+        "mean_cost": 0.0035671663461538474,
+        "latency_us": 68.25609615384616,
+        "n_queries": 832,
+        "fitness": 54.66012062830258
+      }
+    },
+    {
+      "method": "Evolved-Champion",
+      "n_params": 1,
+      "memory_kb": 0.433,
+      "id": {
+        "quality": 0.590891999999998,
+        "cost_reduction_pct": 81.362935277349,
+        "mean_cost": 0.0005015349666666668,
+        "latency_us": 0.13831,
+        "n_queries": 6000,
+        "fitness": 107.90004566640918
+      },
+      "ood": {
+        "quality": 0.5912462740384619,
+        "cost_reduction_pct": 85.45809756234073,
+        "mean_cost": 0.0003913316105769228,
+        "latency_us": 0.1315685096153846,
+        "n_queries": 832,
+        "fitness": 110.39290751576985
+      }
+    }
+  ]
+}

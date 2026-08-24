@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "timestamp": "2026-08-24T17:25:18",
+    "seed": 2026,
+    "generations": 10,
+    "evals_per_generation": 24,
+    "n_train": 6000,
+    "population_size": 14,
+    "convergence_metric": "first generation reaching 95% of run-final best fitness"
+  },
+  "runs": [
+    {
+      "key": "A_single_population",
+      "axis": "A (topology)",
+      "config_label": "Single population, no migration",
+      "db_path": "ablation_A_single_population.db",
+      "baseline_fitness": 99.003,
+      "final_best_fitness": 108.1393,
+      "best_fitness_curve": [
+        107.2506,
+        107.5169,
+        107.492,
+        107.2507,
+        107.2799,
+        107.5234,
+        108.0441,
+        108.0611,
+        108.0759,
+        108.1393
+      ],
+      "gen_to_95pct_final": 1,
+      "gen_to_beat_baseline": 1,
+      "frontier_size": 74,
+      "grid_cells": 12,
+      "archive_size": 226,
+      "champion_hash": "75ea7452badbb8a1"
+    },
+    {
+      "key": "full_island_semantic",
+      "axis": "A/C reference",
+      "config_label": "3-island + migration, semantic ops (full system)",
+      "db_path": "ablation_full_island_semantic.db",
+      "baseline_fitness": 99.0027,
+      "final_best_fitness": 107.7515,
+      "best_fitness_curve": [
+        104.621,
+        107.2575,
+        107.2574,
+        107.324,
+        107.3235,
+        107.3463,
+        107.4681,
+        107.7283,
+        107.7305,
+        107.7515
+      ],
+      "gen_to_95pct_final": 1,
+      "gen_to_beat_baseline": 1,
+      "frontier_size": 137,
+      "grid_cells": 12,
+      "archive_size": 209,
+      "champion_hash": "56da72693d3e28ed"
+    },
+    {
+      "key": "B_greedy_archive",
+      "axis": "B (archive)",
+      "config_label": "Greedy fitness replacement, fitness parents",
+      "db_path": "ablation_B_greedy_archive.db",
+      "baseline_fitness": 99.0024,
+      "final_best_fitness": 107.7513,
+      "best_fitness_curve": [
+        104.6207,
+        107.2575,
+        107.2575,
+        107.3502,
+        107.3128,
+        107.4681,
+        107.7512,
+        107.7513,
+        107.6176,
+        107.6435
+      ],
+      "gen_to_95pct_final": 1,
+      "gen_to_beat_baseline": 1,
+      "frontier_size": 105,
+      "grid_cells": 0,
+      "archive_size": 221,
+      "champion_hash": "34e6a1225afdc1c0"
+    },
+    {
+      "key": "B_map_elites",
+      "axis": "B (archive)",
+      "config_label": "2D MAP-Elites archive, elite-grid parents",
+      "db_path": "ablation_B_map_elites.db",
+      "baseline_fitness": 99.0028,
+      "final_best_fitness": 108.0897,
+      "best_fitness_curve": [
+        106.2213,
+        107.2508,
+        107.8554,
+        108.0893,
+        108.0694,
+        108.0892,
+        108.0893,
+        108.0897,
+        108.0889,
+        107.8691
+      ],
+      "gen_to_95pct_final": 1,
+      "gen_to_beat_baseline": 1,
+      "frontier_size": 102,
+      "grid_cells": 11,
+      "archive_size": 224,
+      "champion_hash": "e3debb55e187c1f7"
+    },
+    {
+      "key": "C_random_perturbation",
+      "axis": "C (operators)",
+      "config_label": "Random constant jitter only",
+      "db_path": "ablation_C_random_perturbation.db",
+      "baseline_fitness": 99.0028,
+      "final_best_fitness": 107.2515,
+      "best_fitness_curve": [
+        99.9604,
+        100.7052,
+        101.2724,
+        105.9444,
+        107.2493,
+        107.2511,
+        107.2512,
+        107.2513,
+        107.2514,
+        107.2515
+      ],
+      "gen_to_95pct_final": 4,
+      "gen_to_beat_baseline": 1,
+      "frontier_size": 124,
+      "grid_cells": 11,
+      "archive_size": 244,
+      "champion_hash": "76de9faf1c8bfcb8"
+    }
+  ],
+  "comparisons": {
+    "A_topology_single_vs_islands": {
+      "final_fitness_delta": -0.3878,
+      "gen_to_95_delta": 0,
+      "winner": "A_single_population"
+    },
+    "B_archive_greedy_vs_mapelites": {
+      "final_fitness_delta": 0.3384,
+      "gen_to_95_delta": 0,
+      "winner": "B_map_elites"
+    },
+    "C_operators_random_vs_semantic": {
+      "final_fitness_delta": 0.5,
+      "gen_to_95_delta": -3,
+      "winner": "full_island_semantic"
+    }
+  }
+}
