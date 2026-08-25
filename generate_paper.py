@@ -17,7 +17,7 @@ CHAMPION_HASH = "22e2a1f5"
 BIB = {
     "frugalgpt": "Chen, L., Zaharia, M., and Zou, J. FrugalGPT: How to use large language models while reducing cost and improving performance. arXiv:2305.05176, 2023.",
     "routellm": "Ong, I., Almahairi, A., Wu, V., Chiang, W.-L., Wu, T., Gonzalez, J. E., Kadous, M. W., and Stoica, I. RouteLLM: Learning to route LLMs with preference data. arXiv:2406.18665, 2024.",
-    "hybridllm": "Ding, D., Malaviya, A., Eisenschlos, C., Zhang, M., and Figueiredo, R. Hybrid LLM: Efficient and enhanced inference via routing. ICLR, 2024.",
+    "ding2024hybrid": "Ding, D., Mallick, A., Wang, C., Sim, R., Mukherjee, S., R{\\\"u}hle, V., Lakshmanan, L.~V., and Awadallah, A.~H. Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing. In \\emph{ICLR}, 2024.",
     "funsearch": "Romera-Paredes, B., Barekatain, M., Novikov, A., et al. Mathematical discoveries from program search with large language models. Nature, 625:468--475, 2024.",
     "mapelites": "Mouret, J.-B. and Clune, J. Illuminating search spaces by mapping elites. arXiv:1504.04909, 2015.",
     "nsgaii": "Deb, K., Pratap, A., Agarwal, S., and Meyarivan, T. A fast and elitist multiobjective genetic algorithm: NSGA-II. IEEE Transactions on Evolutionary Computation, 6(2):182--197, 2002.",
@@ -41,6 +41,12 @@ def load_inputs() -> dict:
         parent_row = con.execute(
             "SELECT code FROM candidates WHERE code_hash = ?", (row["parent_hash"],)
         ).fetchone()
+        pts = [
+            (r["quality"], r["cost_reduction_pct"])
+            for r in con.execute(
+                "SELECT quality, cost_reduction_pct FROM candidates WHERE passed = 1"
+            ).fetchall()
+        ]
     finally:
         con.close()
     if row is None:
@@ -48,12 +54,21 @@ def load_inputs() -> dict:
     champ = dict(row)
     m = re.search(r'estimated_tokens"\] > (\d+)', parent_row["code"]) if parent_row else None
     champ["parent_threshold"] = int(m.group(1)) if m else None
+    champ["pareto_size"] = sum(
+        1
+        for q, c in pts
+        if not any(
+            q2 >= q and c2 >= c and (q2 > q or c2 > c) for q2, c2 in pts if (q2, c2) != (q, c)
+        )
+    )
     return {"bench": bench, "abl": abl, "champ": champ}
 
 
 def derived_stats(data: dict) -> dict:
     by = {r["method"]: r for r in data["bench"]["results"]}
     ch, fr, ml, hw = by["Evolved-Champion"], by["Always-Frontier"], by["ML-DecisionTree"], by["Hand-Written-Baseline"]
+    am = by["Always-Medium"]
+    as_ = by["Always-Small"]
     abl_runs = {r["key"]: r for r in data["abl"]["runs"]}
     abl_agg = data["abl"]["aggregates"]
     comp = data["abl"]["comparisons"]
@@ -70,6 +85,8 @@ def derived_stats(data: dict) -> dict:
         "fr": fr,
         "ml": ml,
         "hw": hw,
+        "am": am,
+        "as": as_,
         "abl": abl_runs,
         "abl_agg": abl_agg,
         "comp": comp,
@@ -85,14 +102,15 @@ def derived_stats(data: dict) -> dict:
 
 def table1_markdown(results: List[dict]) -> str:
     lines = [
-        "| Method | Q (ID) | $\\Delta$C% (ID) | Q (OOD) | $\\Delta$C% (OOD) | L (µs) | Params | Mem (KB) |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Method | Q (ID) | $\\Delta$C% (ID) | Q (OOD) | $\\Delta$C% (OOD) | L (µs) | F (ID) | Params | Mem (KB) |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         lines.append(
             f"| {SHORT_NAMES.get(r['method'], r['method'])} | {r['id']['quality']:.4f}"
             f" | {r['id']['cost_reduction_pct']:.2f} | {r['ood']['quality']:.4f}"
             f" | {r['ood']['cost_reduction_pct']:.2f} | {r['id']['latency_us']:.3f}"
+            f" | {r['id']['fitness']:.2f}"
             f" | {r['n_params']} | {r['memory_kb']:.2f} |"
         )
     return "\n".join(lines)
@@ -100,19 +118,22 @@ def table1_markdown(results: List[dict]) -> str:
 
 def table1_latex(results: List[dict]) -> str:
     lines = [
-        "\\begin{table}[t]\\centering\\small",
+        "\\begin{table}[t]\\centering",
+        "  \\footnotesize\\setlength{\\tabcolsep}{4.5pt}",
         "\\caption{Main results (Table 1). ID: in-distribution train split ($n{=}6000$);"
-        " OOD: distribution-shifted slice ($n{=}832$). Reference cost: always-frontier.}",
+        " OOD: distribution-shifted slice ($n{=}832$). Reference cost: always-frontier."
+        " $F$ is the scalarized fitness of Eq.~\\eqref{eq:fitness} on the ID split.}",
         "\\label{tab:main}",
-        "\\begin{tabular}{lrrrrrrr}\\toprule",
+        "\\begin{tabular}{lrrrrrrrr}\\toprule",
         ("Method & $Q$ (ID) & $\\Delta C\\%$ (ID) & $Q$ (OOD) & $\\Delta C\\%$ (OOD)"
-         " & $L$ ($\\mu\\text{s}$) & Params & Mem (KB)\\\\\\midrule"),
+         " & $L$ ($\\mu\\text{s}$) & $F$ (ID) & Params & Mem (KB)\\\\\\midrule"),
     ]
     for r in results:
         lines.append(
             f"{SHORT_NAMES.get(r['method'], r['method'])} & {r['id']['quality']:.4f} &"
             f" {r['id']['cost_reduction_pct']:.2f} & {r['ood']['quality']:.4f} &"
             f" {r['ood']['cost_reduction_pct']:.2f} & {r['id']['latency_us']:.3f} &"
+            f" {r['id']['fitness']:.2f} &"
             f" {r['n_params']} & {r['memory_kb']:.2f}\\\\"
         )
     lines += ["\\bottomrule\\end{tabular}\\end{table}", ""]
@@ -182,7 +203,9 @@ def table2_markdown(abl_agg: Dict[str, dict]) -> str:
 
 
 def build_paper_tex(data: dict, stats: dict) -> str:
-    ch, fr, ml, hw = stats["ch"], stats["fr"], stats["ml"], stats["hw"]
+    ch, fr, ml, hw, am, as_ = (
+        stats["ch"], stats["fr"], stats["ml"], stats["hw"], stats["am"], stats["as"],
+    )
     abl = stats["abl"]
     champ = data["champ"]
     b = data["bench"]["meta"]
@@ -203,7 +226,7 @@ def build_paper_tex(data: dict, stats: dict) -> str:
         "\\captionsetup{font=small}",
         "\\title{Dynamic Multi-Model LLM Routing via Evolutionary Code Search}",
         "\\author{Thomas Gia Vy Day \\\\ Independent Researcher \\\\ \\texttt{giavytday@gmail.com}}",
-        "\\date{" + b["timestamp"] + "}",
+        "\\date{August 2026}",
         "\\begin{document}",
         "\\maketitle",
         "",
@@ -216,12 +239,16 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             f" archive, and validated by a deterministic multi-stage oracle comprising an AST"
             f" security gate, boundary smoke tests, and a vectorized benchmark over"
             f" {b['n_train']:,} synthetic queries with per-tier quality and token-price models."
-            f" Without any LLM-in-the-loop calls, the search discovers a {stats['abl']['full_island_semantic']['config_label'].split(',')[0].lower()} policy"
+            f" In a controlled synthetic benchmark isolating search mechanics from live API"
+            f" noise, and without any LLM-in-the-loop calls, the search discovers a"
+            f" {stats['abl']['full_island_semantic']['config_label'].split(',')[0].lower()} policy"
             f" that achieves \\textbf{{{ch['id']['cost_reduction_pct']:.1f}\\% cost reduction}}"
             f" relative to always-frontier routing while retaining {qr*100:.1f}\\% of frontier"
             f" quality, at a mean decision latency of \\textbf{{{ch['id']['latency_us']:.3f}\\,$\\mu$s}}"
-            f" per query -- a {sp:.0f}$\\times$ inference-speedup over a supervised"
-            f" decision-tree router of comparable quality. The champion policy generalizes"
+            f" per query -- a {sp:.0f}$\\times$ inference speedup over a supervised"
+            f" decision-tree router, which collapsed to near-zero cost savings"
+            f" ({ml['id']['cost_reduction_pct']:.2f}\\%) by over-indexing on quality alone. The"
+            f" champion policy generalizes"
             f" positively under a distribution shift ({ch['ood']['cost_reduction_pct']:.1f}\\% cost"
             f" reduction on OOD queries). The study is framed as a formal proof of concept for"
             f" the search methodology and its zero-latency AST-evaluated oracle, and the"
@@ -233,7 +260,8 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f}$ for random"
             f" jitter) and island topology reducing frontier-size variance by"
             f" {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}\\%. We release the full"
-            f" lineage database, ablation harness, and paper-generation pipeline."
+            f" lineage database, ablation harness, and paper-generation pipeline at"
+            f" \\url{{https://github.com/giavytday/dynamic-llm-router-search}}."
         ),
         "\\end{abstract}",
         "",
@@ -246,7 +274,7 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " tiers, yet query difficulty is highly heterogeneous: a substantial fraction of"
             " production traffic can be served by cheap models with negligible quality loss"
             " \\cite{frugalgpt}. Learned routers typically frame this as supervised prediction of"
-            " the strongest--cheapest model \\cite{routellm,hybridllm}, which requires preference"
+            " the strongest--cheapest model \\cite{routellm,ding2024hybrid}, which requires preference"
             " data, generalizes poorly under shift, and adds an ML inference stage whose latency"
             " can rival the routing decision it optimizes. Program-search methods such as"
             " FunSearch \\cite{funsearch} and Evolution-through-Large-Models \\cite{elm} instead"
@@ -395,6 +423,28 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             f" threshold pair."
         ),
         (
+            "\\paragraph{Candid baseline parity.} We state plainly that the constant"
+            f" \\emph{{always-medium}} policy is a strong baseline on this corpus: it scores"
+            f" $F={am['id']['fitness']:.2f}$, within {abs(am['id']['fitness'] - ch['id']['fitness']):.2f} of the champion's"
+            f" $F={ch['id']['fitness']:.2f}$. The champion's edge is a nuanced trade-off rather"
+            f" than domination: it buys"
+            f" {ch['id']['cost_reduction_pct'] - am['id']['cost_reduction_pct']:+.1f} points of cost reduction"
+            f" ({ch['id']['cost_reduction_pct']:.2f}\\% vs {am['id']['cost_reduction_pct']:.2f}\\%) at the price of"
+            f" {ch['id']['quality'] - am['id']['quality']:+.2f} points of quality"
+            f" ({ch['id']['quality']:.4f} vs {am['id']['quality']:.4f}), and the trade"
+            f" widens under shift -- on the OOD slice the champion's cost reduction scales to"
+            f" {ch['ood']['cost_reduction_pct']:.1f}\\% while always-medium reaches only"
+            f" {am['ood']['cost_reduction_pct']:.1f}\\%. Under a purely linear scalarization,"
+            f" greedy search indeed converges rapidly into the always-medium basin; the primary"
+            f" strength of MAP-Elites is therefore not scalar fitness but illumination of the"
+            f" entire {champ['pareto_size']}-policy Pareto front (Figure"
+            f" \\ref{{fig:pareto_frontier}}) -- a deployable menu spanning from"
+            f" always-frontier quality ($Q={fr['id']['quality']:.3f}$ at $\\Delta C={fr['id']['cost_reduction_pct']:.1f}\\%$)"
+            f" to aggressive small-tier savers ($Q={stats['as']['id']['quality']:.3f}$ at $\\Delta C={stats['as']['id']['cost_reduction_pct']:.1f}\\%$),"
+            f" from which operators can select per latency and cost budget"
+            f" without re-running the search."
+        ),
+        (
             "Figure \\ref{fig:baseline_comparison} visualizes the Table \\ref{tab:main}"
             " comparison; Figure \\ref{fig:pareto_frontier} shows the full quality-cost"
             " Pareto frontier of the archive."
@@ -505,6 +555,21 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " rotation reordered the two guards -- a textbook example of neutral drift followed"
             " by exploitative refinement."
         ),
+        (
+            "\\paragraph{Why the frontier tier is never called.} The elimination is an"
+            " economic consequence of the scalarization, not a search artifact. Under the"
+            " $20\\times$ frontier price premium, every point of $\\Delta C$ is worth"
+            " $\\lambda = 0.6$ fitness in Eq.~\\eqref{eq:fitness}, while a point of quality is"
+            " worth 100: escalating the math segment -- the only segment where the"
+            " medium-to-frontier quality gap is material -- to the frontier tier would"
+            " surrender on the order of tens of $\\Delta C$ points (tens of fitness units)"
+            " to recover at most $\\approx 0.10\\,Q$ ($\\approx 10$ fitness units). The medium tier"
+            " absorbs all necessary math complexity at roughly a quarter of the frontier"
+            " price, so no marginal routing decision justifies the frontier tariff -- the"
+            " archive corroborates this: its frontier-calling policies (e.g., always-frontier"
+            f" at $F={fr['id']['fitness']:.2f}$) are strictly scalarized away by the champion's"
+            f" $F={ch['id']['fitness']:.2f}$ operating point."
+        ),
         "",
     ]
 
@@ -520,6 +585,17 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " regenerated across corpus seeds. (iv) The 6$\\times$6 grid is"
             " coarse; finer binning may expose additional niches. (v) The OOD shift is"
             " feature-level (extreme tokens, code$\\wedge$math, density), not adversarial."
+            " (vi) The evolved champion never exercises the frontier tier -- an optimum"
+            " \\emph{under this corpus and scalarization}, not a universal law: deployments"
+            " with stricter quality floors or different tier pricing may require frontier"
+            " escalation, and the MAP-Elites archive already retains frontier-calling"
+            " policies should the operating point shift. (vii) The linear fitness"
+            " coefficients $(100, 0.6, 0.05, 300)$ in Eq.~\\eqref{eq:fitness} fix a specific"
+            " cost-quality preference: the quality term dominates tenfold over cost pressure,"
+            " and a different $\\lambda$ would re-rank the archive -- notably, sweeping"
+            " $\\lambda$ selects distinct operating points from the existing MAP-Elites grid"
+            " without re-running the search, which we view as the practical remedy for this"
+            " sensitivity."
         ),
         (
             "\\paragraph{Toward live production deployment.} The bridge from synthetic"
@@ -554,7 +630,7 @@ def build_paper_tex(data: dict, stats: dict) -> str:
         "",
         "\\begin{thebibliography}{9}",
     ]
-    for key in ("frugalgpt", "routellm", "hybridllm", "funsearch", "mapelites", "nsgaii", "elm"):
+    for key in ("frugalgpt", "routellm", "ding2024hybrid", "funsearch", "mapelites", "nsgaii", "elm"):
         tex.append(f"\\bibitem{{{key}}} {BIB[key]}")
     tex += ["\\end{thebibliography}", "\\end{document}", ""]
     return "\n".join(tex)
@@ -570,7 +646,7 @@ def build_paper_md(data: dict, stats: dict) -> str:
     md += [
         "# Dynamic Multi-Model LLM Routing via Evolutionary Code Search",
         "",
-        f"*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · generated {b['timestamp']}*",
+        f"*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · August 2026*",
         "",
         "## Abstract",
         "",
@@ -578,12 +654,15 @@ def build_paper_md(data: dict, stats: dict) -> str:
             f"We reframe LLM router design as program search: routing policies are executable"
             f" Python functions evolved by a 3-island MAP-Elites genetic search and validated by a"
             f" deterministic 3-gate oracle (AST security, smoke tests, vectorized benchmark with a"
-            f" hard 100 µs latency penalty). Without any LLM-in-the-loop calls, the search discovers"
+            f" hard 100 µs latency penalty). In a controlled synthetic benchmark isolating search"
+            f" mechanics from live API noise, and without any LLM-in-the-loop calls, the search discovers"
             f" a policy delivering **{ch['id']['cost_reduction_pct']:.1f}% cost reduction** vs always-frontier routing at"
             f" **{ch['id']['latency_us']:.3f} µs** mean decision latency, retaining"
             f" {stats['quality_retention']*100:.1f}% of frontier quality, generalizing positively OOD"
-            f" ({ch['ood']['cost_reduction_pct']:.1f}% cost reduction), and out-running a supervised"
-            f" decision-tree router by {stats['speedup_vs_ml']:.0f}×. Framed as a formal proof of"
+            f" ({ch['ood']['cost_reduction_pct']:.1f}% cost reduction) — a"
+            f" {stats['speedup_vs_ml']:.0f}× inference speedup over a supervised decision-tree router,"
+            f" which collapsed to near-zero cost savings ({ml['id']['cost_reduction_pct']:.2f}%) by"
+            f" over-indexing on quality alone. Framed as a formal proof of"
             f" concept for the search methodology and its zero-latency AST-evaluated oracle, the"
             f" 5-seed ablation suite shows mean peak fitness is robust across topology, archive,"
             f" and operator ablations (all means within {stats['peak_spread']:.2f}), with semantic"
@@ -591,6 +670,8 @@ def build_paper_md(data: dict, stats: dict) -> str:
             f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['mean']:.1f}±{stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f})"
             f" and islands cutting frontier-size variance by"
             f" {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}%."
+            f" Code, lineage, and paper pipeline:"
+            f" https://github.com/giavytday/dynamic-llm-router-search."
         ),
         "",
         "## 1. Introduction & Related Work",
@@ -672,6 +753,24 @@ def build_paper_md(data: dict, stats: dict) -> str:
             f" {stats['cost_fraction']*100:.1f}% of frontier cost."
         ),
         "",
+        (
+            f"**Candid baseline parity.** The constant *always-medium* policy is a strong"
+            f" baseline here: F={stats['am']['id']['fitness']:.2f}, within"
+            f" {abs(stats['am']['id']['fitness'] - ch['id']['fitness']):.2f} of the champion's"
+            f" F={ch['id']['fitness']:.2f}. The champion's edge is a nuanced trade-off:"
+            f" {ch['id']['cost_reduction_pct'] - stats['am']['id']['cost_reduction_pct']:+.1f} points of cost reduction"
+            f" ({ch['id']['cost_reduction_pct']:.2f}% vs {stats['am']['id']['cost_reduction_pct']:.2f}%) for"
+            f" {ch['id']['quality'] - stats['am']['id']['quality']:+.2f} points of quality, scaling to"
+            f" {ch['ood']['cost_reduction_pct']:.1f}% cost reduction on OOD (vs"
+            f" {stats['am']['ood']['cost_reduction_pct']:.1f}% for always-medium). Under a purely linear"
+            f" scalarization, greedy search converges rapidly into the always-medium basin; the"
+            f" primary strength of MAP-Elites is illuminating the entire"
+            f" {champ['pareto_size']}-policy Pareto front — a deployable menu from always-frontier"
+            f" quality (Q={stats['fr']['id']['quality']:.3f}, ΔC={stats['fr']['id']['cost_reduction_pct']:.1f}%) to small-tier savers"
+            f" (Q={stats['as']['id']['quality']:.3f}, ΔC={stats['as']['id']['cost_reduction_pct']:.1f}%) — so operators can pick per latency/cost"
+            f" budget without re-running the search."
+        ),
+        "",
         "![Baseline vs Champion](baseline_vs_champion.png)",
         "",
         "![Pareto Frontier](pareto_frontier.png)",
@@ -746,13 +845,31 @@ def build_paper_md(data: dict, stats: dict) -> str:
             " followed by exploitative refinement."
         ),
         "",
+        (
+            "**Why the frontier tier is never called.** Under the 20× price premium and the"
+            " scalarization's cost pressure (λ = 0.6 per ΔC point in Eq. 4), escalating the"
+            " math segment — the only segment where the medium→frontier quality gap is"
+            " material — would surrender on the order of tens of ΔC points (tens of fitness"
+            " units) to recover at most ≈0.10 Q (≈10 fitness units). Medium absorbs all"
+            " necessary math complexity at roughly a quarter of the frontier price, so no"
+            f" marginal decision justifies the frontier tariff: the archive's frontier-calling"
+            f" policies (e.g., always-frontier, F={stats['fr']['id']['fitness']:.2f}) are strictly scalarized"
+            f" away by the champion's F={ch['id']['fitness']:.2f} operating point."
+        ),
+        "",
         "## 6. Limitations, OOD Generalization, & Conclusion",
         "",
         (
             "**Limitations.** Synthetic quality model (no live API calls); latency = policy"
             " overhead only; the 5-seed replication varies search stochasticity only — the"
             " corpus itself is a single synthetic draw; coarse 6×6 grid; feature-level OOD"
-            " shift, not adversarial."
+            " shift, not adversarial; the champion never exercises the frontier tier — an"
+            " optimum *under this corpus and scalarization*, not a universal law (stricter"
+            " quality floors or different pricing may require escalation, and the archive"
+            " retains frontier-calling policies); the linear fitness coefficients (100, 0.6,"
+            " 0.05, 300) fix a specific cost-quality preference — sweeping the cost-pressure"
+            " weight λ would re-rank the existing MAP-Elites archive without re-running the"
+            " search."
         ),
         "",
         (
@@ -784,7 +901,7 @@ def build_paper_md(data: dict, stats: dict) -> str:
         "## References",
         "",
     ]
-    for i, key in enumerate(("frugalgpt", "routellm", "hybridllm", "funsearch", "mapelites", "nsgaii", "elm"), 1):
+    for i, key in enumerate(("frugalgpt", "routellm", "ding2024hybrid", "funsearch", "mapelites", "nsgaii", "elm"), 1):
         md.append(f"[{i}] {BIB[key]}")
     md.append("")
     return "\n".join(md)

@@ -1,10 +1,10 @@
 # Dynamic Multi-Model LLM Routing via Evolutionary Code Search
 
-*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · generated 2026-08-24T17:46:12*
+*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · August 2026*
 
 ## Abstract
 
-We reframe LLM router design as program search: routing policies are executable Python functions evolved by a 3-island MAP-Elites genetic search and validated by a deterministic 3-gate oracle (AST security, smoke tests, vectorized benchmark with a hard 100 µs latency penalty). Without any LLM-in-the-loop calls, the search discovers a policy delivering **81.4% cost reduction** vs always-frontier routing at **0.138 µs** mean decision latency, retaining 82.0% of frontier quality, generalizing positively OOD (85.5% cost reduction), and out-running a supervised decision-tree router by 489×. Framed as a formal proof of concept for the search methodology and its zero-latency AST-evaluated oracle, the 5-seed ablation suite shows mean peak fitness is robust across topology, archive, and operator ablations (all means within 0.17), with semantic mutation the sole convergence signal (Gen→95% 1.0±0.0 vs 1.6±1.3) and islands cutting frontier-size variance by 65%.
+We reframe LLM router design as program search: routing policies are executable Python functions evolved by a 3-island MAP-Elites genetic search and validated by a deterministic 3-gate oracle (AST security, smoke tests, vectorized benchmark with a hard 100 µs latency penalty). In a controlled synthetic benchmark isolating search mechanics from live API noise, and without any LLM-in-the-loop calls, the search discovers a policy delivering **81.4% cost reduction** vs always-frontier routing at **0.138 µs** mean decision latency, retaining 82.0% of frontier quality, generalizing positively OOD (85.5% cost reduction) — a 489× inference speedup over a supervised decision-tree router, which collapsed to near-zero cost savings (0.47%) by over-indexing on quality alone. Framed as a formal proof of concept for the search methodology and its zero-latency AST-evaluated oracle, the 5-seed ablation suite shows mean peak fitness is robust across topology, archive, and operator ablations (all means within 0.17), with semantic mutation the sole convergence signal (Gen→95% 1.0±0.0 vs 1.6±1.3) and islands cutting frontier-size variance by 65%. Code, lineage, and paper pipeline: https://github.com/giavytday/dynamic-llm-router-search.
 
 ## 1. Introduction & Related Work
 
@@ -28,18 +28,20 @@ A policy `select_model(q) -> {small, medium, frontier}` is scored by Q = E[quali
 
 **Table 1: Main Results.**
 
-| Method | Q (ID) | $\Delta$C% (ID) | Q (OOD) | $\Delta$C% (OOD) | L (µs) | Params | Mem (KB) |
-|---|---|---|---|---|---|---|---|
-| Frontier | 0.7208 | 0.00 | 0.7763 | -32.74 | 0.100 | 1 | 0.23 |
-| Medium | 0.6072 | 77.56 | 0.6544 | 69.69 | 0.097 | 1 | 0.23 |
-| Small | 0.4490 | 95.79 | 0.4851 | 94.32 | 0.098 | 1 | 0.23 |
-| Random | 0.5888 | 58.82 | 0.6266 | 46.79 | 0.419 | 0 | 0.32 |
-| Heuristic | 0.5512 | 82.32 | 0.6661 | 60.85 | 0.250 | 6 | 0.81 |
-| Hand-Written | 0.5560 | 72.35 | 0.7292 | 32.77 | 0.174 | 5 | 0.85 |
-| ML-Tree | 0.7203 | 0.47 | 0.7761 | -32.56 | 67.624 | 133 | 12.65 |
-| Champion | 0.5909 | 81.36 | 0.5912 | 85.46 | 0.138 | 1 | 0.43 |
+| Method | Q (ID) | $\Delta$C% (ID) | Q (OOD) | $\Delta$C% (OOD) | L (µs) | F (ID) | Params | Mem (KB) |
+|---|---|---|---|---|---|---|---|---|
+| Frontier | 0.7208 | 0.00 | 0.7763 | -32.74 | 0.100 | 72.08 | 1 | 0.23 |
+| Medium | 0.6072 | 77.56 | 0.6544 | 69.69 | 0.097 | 107.25 | 1 | 0.23 |
+| Small | 0.4490 | 95.79 | 0.4851 | 94.32 | 0.098 | 102.37 | 1 | 0.23 |
+| Random | 0.5888 | 58.82 | 0.6266 | 46.79 | 0.419 | 94.14 | 0 | 0.32 |
+| Heuristic | 0.5512 | 82.32 | 0.6661 | 60.85 | 0.250 | 104.50 | 6 | 0.81 |
+| Hand-Written | 0.5560 | 72.35 | 0.7292 | 32.77 | 0.174 | 99.00 | 5 | 0.85 |
+| ML-Tree | 0.7203 | 0.47 | 0.7761 | -32.56 | 67.624 | 68.93 | 133 | 12.65 |
+| Champion | 0.5909 | 81.36 | 0.5912 | 85.46 | 0.138 | 107.90 | 1 | 0.43 |
 
 The supervised decision tree collapses to always-frontier imitation (Q=0.7203, ΔC=0.47%) at 67.6 µs/query — 489× slower than the champion for a dominated operating point. The champion retains 82.0% of frontier quality at 18.6% of frontier cost.
+
+**Candid baseline parity.** The constant *always-medium* policy is a strong baseline here: F=107.25, within 0.65 of the champion's F=107.90. The champion's edge is a nuanced trade-off: +3.8 points of cost reduction (81.36% vs 77.56%) for -0.02 points of quality, scaling to 85.5% cost reduction on OOD (vs 69.7% for always-medium). Under a purely linear scalarization, greedy search converges rapidly into the always-medium basin; the primary strength of MAP-Elites is illuminating the entire 131-policy Pareto front — a deployable menu from always-frontier quality (Q=0.721, ΔC=0.0%) to small-tier savers (Q=0.449, ΔC=95.8%) — so operators can pick per latency/cost budget without re-running the search.
 
 ![Baseline vs Champion](baseline_vs_champion.png)
 
@@ -82,9 +84,11 @@ def select_model(q):
 
 Simplified semantics: **math → medium; non-math ≤367 tokens → medium; long non-math → small; frontier branch unreachable.** Value comes from (1) frontier elimination (20× premium never paid), (2) difficulty-aware escalation of math queries to medium, and (3) difficulty inversion — long non-math queries are easy, so bulk traffic rides the small tier. The 367-token threshold is a `tweak_constants` child of its parent's 522-token threshold, one generation after a branch rotation — neutral drift followed by exploitative refinement.
 
+**Why the frontier tier is never called.** Under the 20× price premium and the scalarization's cost pressure (λ = 0.6 per ΔC point in Eq. 4), escalating the math segment — the only segment where the medium→frontier quality gap is material — would surrender on the order of tens of ΔC points (tens of fitness units) to recover at most ≈0.10 Q (≈10 fitness units). Medium absorbs all necessary math complexity at roughly a quarter of the frontier price, so no marginal decision justifies the frontier tariff: the archive's frontier-calling policies (e.g., always-frontier, F=72.08) are strictly scalarized away by the champion's F=107.90 operating point.
+
 ## 6. Limitations, OOD Generalization, & Conclusion
 
-**Limitations.** Synthetic quality model (no live API calls); latency = policy overhead only; the 5-seed replication varies search stochasticity only — the corpus itself is a single synthetic draw; coarse 6×6 grid; feature-level OOD shift, not adversarial.
+**Limitations.** Synthetic quality model (no live API calls); latency = policy overhead only; the 5-seed replication varies search stochasticity only — the corpus itself is a single synthetic draw; coarse 6×6 grid; feature-level OOD shift, not adversarial; the champion never exercises the frontier tier — an optimum *under this corpus and scalarization*, not a universal law (stricter quality floors or different pricing may require escalation, and the archive retains frontier-calling policies); the linear fitness coefficients (100, 0.6, 0.05, 300) fix a specific cost-quality preference — sweeping the cost-pressure weight λ would re-rank the existing MAP-Elites archive without re-running the search.
 
 **Toward live production deployment.** Three concrete stages: **Stage 1 — Trace Replay on live logs:** re-score anonymized production queries through all three tiers, replace the simulated quality model with empirical per-tier quality, and re-run the seconds-cheap search on the calibrated corpus. **Stage 2 — Stratified Human/LLM Judgment:** within each difficulty stratum, compare champion vs always-frontier with human raters or an LLM judge, validating the ordinal quality structure the policy exploits. **Stage 3 — Shadow Canary Deployment:** mirror 1–5% of traffic to the evolved policy while monitoring per-tier quality drift, cost per resolved query, and tail latency, with automatic rollback and scheduled re-evolution as model prices and capabilities drift.
 
@@ -96,7 +100,7 @@ Simplified semantics: **math → medium; non-math ≤367 tokens → medium; long
 
 [1] Chen, L., Zaharia, M., and Zou, J. FrugalGPT: How to use large language models while reducing cost and improving performance. arXiv:2305.05176, 2023.
 [2] Ong, I., Almahairi, A., Wu, V., Chiang, W.-L., Wu, T., Gonzalez, J. E., Kadous, M. W., and Stoica, I. RouteLLM: Learning to route LLMs with preference data. arXiv:2406.18665, 2024.
-[3] Ding, D., Malaviya, A., Eisenschlos, C., Zhang, M., and Figueiredo, R. Hybrid LLM: Efficient and enhanced inference via routing. ICLR, 2024.
+[3] Ding, D., Mallick, A., Wang, C., Sim, R., Mukherjee, S., R{\"u}hle, V., Lakshmanan, L.~V., and Awadallah, A.~H. Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing. In \emph{ICLR}, 2024.
 [4] Romera-Paredes, B., Barekatain, M., Novikov, A., et al. Mathematical discoveries from program search with large language models. Nature, 625:468--475, 2024.
 [5] Mouret, J.-B. and Clune, J. Illuminating search spaces by mapping elites. arXiv:1504.04909, 2015.
 [6] Deb, K., Pratap, A., Agarwal, S., and Meyarivan, T. A fast and elitist multiobjective genetic algorithm: NSGA-II. IEEE Transactions on Evolutionary Computation, 6(2):182--197, 2002.
