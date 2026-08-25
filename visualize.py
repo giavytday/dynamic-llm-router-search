@@ -1,5 +1,6 @@
-"""Publication-ready figures from evolution_search.db: Pareto frontier + fitness trajectory."""
+"""Publication-ready figures: Pareto frontier, fitness trajectory, baseline comparison."""
 
+import json
 import sqlite3
 import subprocess
 import sys
@@ -7,7 +8,19 @@ from statistics import mean
 from typing import Dict, List
 
 DB_PATH = "evolution_search.db"
+BENCH_PATH = "benchmark_results.json"
 ISLAND_COLORS = {0: "tab:blue", 1: "tab:green", 2: "tab:orange"}
+SHORT_NAMES = {
+    "Always-Frontier": "Frontier",
+    "Always-Medium": "Medium",
+    "Always-Small": "Small",
+    "Random-Uniform": "Random",
+    "Heuristic-Threshold": "Heuristic",
+    "Hand-Written-Baseline": "Hand-Written",
+    "ML-DecisionTree": "ML-Tree",
+    "Evolved-Champion": "Champion",
+}
+MARGINS = dict(top=0.88, bottom=0.15, left=0.10, right=0.95, hspace=0.35, wspace=0.30)
 
 
 def ensure_matplotlib() -> None:
@@ -30,7 +43,7 @@ def load_rows(query: str):
         con.close()
 
 
-def non_dominated(rows) -> List[sqlite3.Row]:
+def non_dominated(rows) -> List:
     front = []
     for a in rows:
         dominated = any(
@@ -45,6 +58,15 @@ def non_dominated(rows) -> List[sqlite3.Row]:
     return front
 
 
+def _finish(fig, out_path: str) -> None:
+    fig.tight_layout()
+    fig.subplots_adjust(**MARGINS)
+    fig.savefig(out_path, dpi=300)
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
 def figure_pareto(rows, out_path: str) -> None:
     import matplotlib.pyplot as plt
 
@@ -52,13 +74,13 @@ def figure_pareto(rows, out_path: str) -> None:
     front = sorted(non_dominated(passed), key=lambda r: r["cost_reduction_pct"])
     champion = max(passed, key=lambda r: r["fitness"])
 
-    fig, ax = plt.subplots(figsize=(8.2, 5.6))
+    fig, ax = plt.subplots(figsize=(11, 5))
     sc = ax.scatter(
         [r["cost_reduction_pct"] for r in passed],
         [r["quality"] for r in passed],
         c=[r["generation"] for r in passed],
         cmap="viridis",
-        s=26,
+        s=24,
         alpha=0.55,
         edgecolors="none",
         label="evaluated candidates",
@@ -76,7 +98,7 @@ def figure_pareto(rows, out_path: str) -> None:
     ax.scatter(
         [r["cost_reduction_pct"] for r in front],
         [r["quality"] for r in front],
-        s=64,
+        s=58,
         facecolors="none",
         edgecolors="crimson",
         lw=1.5,
@@ -86,7 +108,7 @@ def figure_pareto(rows, out_path: str) -> None:
         [champion["cost_reduction_pct"]],
         [champion["quality"]],
         marker="*",
-        s=340,
+        s=320,
         color="gold",
         edgecolors="black",
         lw=0.9,
@@ -96,19 +118,18 @@ def figure_pareto(rows, out_path: str) -> None:
     ax.annotate(
         f"fit={champion['fitness']:.2f}",
         xy=(champion["cost_reduction_pct"], champion["quality"]),
-        xytext=(6, -14),
+        xytext=(7, -13),
         textcoords="offset points",
-        fontsize=9,
+        fontsize=8,
     )
-    bar = fig.colorbar(sc, ax=ax, pad=0.02)
+    bar = fig.colorbar(sc, ax=ax, pad=0.015)
     bar.set_label("discovery generation")
+    bar.ax.tick_params(labelsize=9)
     ax.set_xlabel(r"Cost Reduction $\Delta C$ (%)")
     ax.set_ylabel(r"Relative Quality $Q$")
     ax.set_title("Pareto Frontier of Evolved Routing Policies")
     ax.legend(loc="lower left", frameon=True, framealpha=0.9)
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
+    _finish(fig, out_path)
 
 
 def figure_trajectory(rows, out_path: str) -> None:
@@ -125,7 +146,7 @@ def figure_trajectory(rows, out_path: str) -> None:
     baseline_row = load_rows("SELECT fitness FROM candidates WHERE origin='baseline' LIMIT 1")
     baseline_fit = baseline_row[0]["fitness"] if baseline_row else None
 
-    fig, ax = plt.subplots(figsize=(8.2, 5.2))
+    fig, ax = plt.subplots(figsize=(11, 5))
     for isl in sorted(per_island):
         gens = sorted(per_island[isl])
         maxima = [max(per_island[isl][g]) for g in gens]
@@ -146,21 +167,67 @@ def figure_trajectory(rows, out_path: str) -> None:
     if baseline_fit is not None:
         ax.axhline(baseline_fit, color="grey", ls=":", lw=1.3)
         ax.text(
-            10.15,
+            10.12,
             baseline_fit,
             f"baseline\n{baseline_fit:.1f}",
             va="center",
-            fontsize=8.5,
+            fontsize=8,
             color="grey",
         )
     ax.set_xlabel("Generation")
     ax.set_ylabel("Fitness")
     ax.set_title("Search Progress per Island (MAP-Elites + Island Model)")
     ax.set_xticks(range(1, 11))
-    ax.legend(ncol=3, fontsize=8.5, loc="lower right", frameon=True, framealpha=0.9)
-    fig.tight_layout()
-    fig.savefig(out_path)
-    plt.close(fig)
+    ax.set_xlim(0.6, 10.9)
+    ax.legend(ncol=3, loc="lower right", frameon=True, framealpha=0.9)
+    _finish(fig, out_path)
+
+
+def figure_baseline_comparison(bench_path: str, out_path: str) -> None:
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    with open(bench_path) as fh:
+        results = json.load(fh)["results"]
+    names = [SHORT_NAMES[r["method"]] for r in results]
+    champion_idx = names.index("Champion")
+    x = np.arange(len(names))
+    w = 0.38
+
+    def bar_colors(ood: bool) -> List[str]:
+        return [
+            "#c62828" if i == champion_idx else ("#ef9a9a" if ood else "#90caf9")
+            for i in range(len(names))
+        ]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 5))
+
+    ax1.bar(x - w / 2, [r["id"]["quality"] for r in results], w,
+            color=bar_colors(False), label="ID (train)")
+    ax1.bar(x + w / 2, [r["ood"]["quality"] for r in results], w,
+            color=bar_colors(True), label="OOD shift")
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(names, rotation=28, ha="right")
+    ax1.set_ylabel(r"Relative Quality $Q$")
+    ax1.set_ylim(0, 0.85)
+    ax1.set_title("Routing Quality")
+    ax1.legend(loc="upper left", frameon=True, framealpha=0.9)
+
+    ax2.bar(x - w / 2, [r["id"]["cost_reduction_pct"] for r in results], w,
+            color=bar_colors(False))
+    ax2.bar(x + w / 2, [r["ood"]["cost_reduction_pct"] for r in results], w,
+            color=bar_colors(True))
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(names, rotation=28, ha="right")
+    ax2.set_ylabel(r"Cost Reduction $\Delta C$ (%)")
+    ax2.set_title("Cost Reduction vs Always-Frontier")
+    ax2.axhline(0.0, color="grey", lw=0.8)
+
+    for ax in (ax1, ax2):
+        ax.grid(axis="y", alpha=0.3)
+        ax.set_axisbelow(True)
+    fig.suptitle("Baseline Routers vs Evolved Champion (Table 1)", fontsize=11, y=0.97)
+    _finish(fig, out_path)
 
 
 def main() -> None:
@@ -170,14 +237,17 @@ def main() -> None:
     matplotlib.use("Agg")
     matplotlib.rcParams.update(
         {
-            "savefig.dpi": 200,
+            "savefig.dpi": 300,
+            "figure.dpi": 120,
+            "axes.titlesize": 11,
+            "axes.labelsize": 10,
+            "xtick.labelsize": 9,
+            "ytick.labelsize": 9,
+            "legend.fontsize": 8,
             "axes.grid": True,
             "grid.alpha": 0.3,
             "axes.spines.top": False,
             "axes.spines.right": False,
-            "font.size": 11,
-            "axes.titlesize": 13,
-            "axes.labelsize": 12,
         }
     )
     rows = load_rows("SELECT * FROM candidates")
@@ -187,6 +257,8 @@ def main() -> None:
     print("saved pareto_frontier.png")
     figure_trajectory(rows, "fitness_trajectory.png")
     print("saved fitness_trajectory.png")
+    figure_baseline_comparison(BENCH_PATH, "baseline_vs_champion.png")
+    print("saved baseline_vs_champion.png")
 
 
 if __name__ == "__main__":

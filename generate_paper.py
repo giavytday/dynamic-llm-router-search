@@ -55,12 +55,26 @@ def derived_stats(data: dict) -> dict:
     by = {r["method"]: r for r in data["bench"]["results"]}
     ch, fr, ml, hw = by["Evolved-Champion"], by["Always-Frontier"], by["ML-DecisionTree"], by["Hand-Written-Baseline"]
     abl_runs = {r["key"]: r for r in data["abl"]["runs"]}
+    abl_agg = data["abl"]["aggregates"]
+    comp = data["abl"]["comparisons"]
+    frontier_ratio = (
+        abl_agg["full_island_semantic"]["frontier_size"]["mean"]
+        / abl_agg["A_single_population"]["frontier_size"]["mean"]
+        - 1.0
+    )
+    peak_spread = max(a["peak_fitness"]["mean"] for a in abl_agg.values()) - min(
+        a["peak_fitness"]["mean"] for a in abl_agg.values()
+    )
     return {
         "ch": ch,
         "fr": fr,
         "ml": ml,
         "hw": hw,
         "abl": abl_runs,
+        "abl_agg": abl_agg,
+        "comp": comp,
+        "frontier_ratio": frontier_ratio,
+        "peak_spread": peak_spread,
         "quality_retention": ch["id"]["quality"] / fr["id"]["quality"],
         "cost_fraction": 1.0 - ch["id"]["cost_reduction_pct"] / 100.0,
         "speedup_vs_ml": ml["id"]["latency_us"] / ch["id"]["latency_us"],
@@ -91,8 +105,8 @@ def table1_latex(results: List[dict]) -> str:
         " OOD: distribution-shifted slice ($n{=}832$). Reference cost: always-frontier.}",
         "\\label{tab:main}",
         "\\begin{tabular}{lrrrrrrr}\\toprule",
-        "Method & \\multicolumn{2}{c}{ID} & \\multicolumn{2}{c}{OOD} & $L$ ($\\mu$s) & Params & Mem (KB)\\\\",
-        " & $Q$ & $\\Delta C$\\% & $Q$ & $\\Delta C$\\% & & & \\\\\\midrule",
+        ("Method & $Q$ (ID) & $\\Delta C\\%$ (ID) & $Q$ (OOD) & $\\Delta C\\%$ (OOD)"
+         " & $L$ ($\\mu\\text{s}$) & Params & Mem (KB)\\\\\\midrule"),
     ]
     for r in results:
         lines.append(
@@ -115,36 +129,53 @@ ABL_TEX_ROWS = [
 ]
 
 
-def table2_latex(abl_runs: Dict[str, dict]) -> str:
+def _ms_tex(a: dict, fmt: str = "%.2f") -> str:
+    return f"${fmt % a['mean']} \\pm {a['std']:.2f}$"
+
+
+def _ms_md(a: dict, fmt: str = "%.2f") -> str:
+    return f"{fmt % a['mean']} ± {a['std']:.2f}"
+
+
+def table2_latex(abl_agg: Dict[str, dict], seeds: List[int]) -> str:
     lines = [
         "\\begin{table}[t]\\centering\\small",
-        "\\caption{Ablation results (Table 2). Budget-controlled: every variant evaluates 24"
-        " offspring per generation for 10 generations (seed 2026). Gen$\\to$95\\%: first"
-        " generation reaching 95\\% of the run-final best fitness.}",
+        "\\caption{Ablation results (Table 2), aggregated as $\\mathrm{mean} \\pm \\mathrm{std}$"
+        f" over {len(seeds)} seeds ({', '.join(map(str, seeds))}). Budget-controlled: every"
+        " variant evaluates 24 offspring per generation for 10 generations. Gen$\\to$95\\%:"
+        " first generation reaching 95\\% of the run-final best fitness; Elites: unique"
+        " passing candidates in the run archive; Cells: occupied MAP-Elites grid cells.}",
         "\\label{tab:ablation}",
         "\\begin{tabular}{llrrrrr}\\toprule",
-        "Axis & Variant & Fitness & Gen$\\to$95\\% & Gen$>$Base & $|E|$ & Cells\\\\\\midrule",
+        ("Axis & Variant & Peak Fitness & Gen$\\to$95\\% & Gen$>$Base & Elites & Cells\\\\"
+         "\\midrule"),
     ]
     for axis, label, key in ABL_TEX_ROWS:
-        r = abl_runs[key]
+        a = abl_agg[key]
         lines.append(
-            f"{axis} & {label} & {r['final_best_fitness']:.2f} & {r['gen_to_95pct_final']} &"
-            f" {r['gen_to_beat_baseline']} & {r['frontier_size']} & {r['grid_cells']}\\\\"
+            f"{axis} & {label} & {_ms_tex(a['peak_fitness'])}"
+            f" & {_ms_tex(a['gen_to_95pct_final'], '%.1f')}"
+            f" & {_ms_tex(a['gen_to_beat_baseline'], '%.1f')}"
+            f" & {_ms_tex(a['elite_count'], '%.1f')}"
+            f" & {_ms_tex(a['grid_cells'], '%.1f')}\\\\"
         )
     lines += ["\\bottomrule\\end{tabular}\\end{table}", ""]
     return "\n".join(lines)
 
 
-def table2_markdown(abl_runs: Dict[str, dict]) -> str:
+def table2_markdown(abl_agg: Dict[str, dict]) -> str:
     lines = [
-        "| Axis | Variant | Final Fitness | Gen→95% | Gen>Base | Frontier \\|E\\| | Grid Cells |",
+        "| Axis | Variant | Peak Fitness | Gen→95% | Gen>Base | Elites | Cells |",
         "|---|---|---|---|---|---|---|",
     ]
     for axis, label, key in ABL_TEX_ROWS:
-        r = abl_runs[key]
+        a = abl_agg[key]
         lines.append(
-            f"| {axis} | {label} | {r['final_best_fitness']:.2f} | {r['gen_to_95pct_final']}"
-            f" | {r['gen_to_beat_baseline']} | {r['frontier_size']} | {r['grid_cells']} |"
+            f"| {axis} | {label} | {_ms_md(a['peak_fitness'])}"
+            f" | {_ms_md(a['gen_to_95pct_final'], '%.1f')}"
+            f" | {_ms_md(a['gen_to_beat_baseline'], '%.1f')}"
+            f" | {_ms_md(a['elite_count'], '%.1f')}"
+            f" | {_ms_md(a['grid_cells'], '%.1f')} |"
         )
     return "\n".join(lines)
 
@@ -170,7 +201,7 @@ def build_paper_tex(data: dict, stats: dict) -> str:
         "\\usepackage{caption}",
         "\\captionsetup{font=small}",
         "\\title{Dynamic Multi-Model LLM Routing via Evolutionary Code Search}",
-        "\\author{Anonymous -- AI Systems Research Group}",
+        "\\author{Thomas Gia Vy Day \\\\ Independent Researcher \\\\ \\texttt{giavytday@gmail.com}}",
         "\\date{" + b["timestamp"] + "}",
         "\\begin{document}",
         "\\maketitle",
@@ -191,12 +222,16 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             f" per query -- a {sp:.0f}$\\times$ inference-speedup over a supervised"
             f" decision-tree router of comparable quality. The champion policy generalizes"
             f" positively under a distribution shift ({ch['ood']['cost_reduction_pct']:.1f}\\% cost"
-            f" reduction on OOD queries), and ablations isolate the contribution of each search"
-            f" component: semantic mutation accelerates convergence by 3 generations over random"
-            f" constant perturbation, MAP-Elites parent selection improves final fitness by"
-            f" {abs(comp['B_archive_greedy_vs_mapelites']['final_fitness_delta']):.2f} points over greedy replacement, and island topology"
-            f" trades {abs(comp['A_topology_single_vs_islands']['final_fitness_delta']):.2f} fitness points for a"
-            f" {100*(abl['full_island_semantic']['frontier_size']/abl['A_single_population']['frontier_size']-1):.0f}\\% larger Pareto frontier. We release the full"
+            f" reduction on OOD queries). The study is framed as a formal proof of concept for"
+            f" the search methodology and its zero-latency AST-evaluated oracle, and the"
+            f" ablation suite is replicated over five seeds: mean peak fitness is remarkably"
+            f" robust to topology, archive, and operator ablations (all variant means within"
+            f" {stats['peak_spread']:.2f} fitness, $\\sigma \\leq 0.43$), with semantic mutation the sole"
+            f" convergence-axis signal (Gen$\\to$95\\% of $1.0 \\pm 0.0$ vs"
+            f" ${stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['mean']:.1f} \\pm"
+            f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f}$ for random"
+            f" jitter) and island topology reducing frontier-size variance by"
+            f" {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}\\%. We release the full"
             f" lineage database, ablation harness, and paper-generation pipeline."
         ),
         "\\end{abstract}",
@@ -233,13 +268,17 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " embedding forward pass."
         ),
         (
-            "We treat the router itself as the evolving artifact. A deterministic oracle replaces"
+            "We treat the router itself as the evolving artifact, and this work as a formal"
+            " proof of concept: the object of study is the search methodology together with its"
+            " zero-latency AST-evaluated oracle, deliberately isolated from production concerns"
+            " so that every claim is exactly reproducible. The deterministic oracle replaces"
             " expensive LLM feedback with a simulated but internally consistent query corpus and"
             " per-tier quality model, enabling thousands of policy evaluations per minute. Our"
             " contributions are: (i) a three-gate evaluation oracle (AST security, smoke tests,"
             " vectorized benchmark with hard latency penalty); (ii) an island-model MAP-Elites"
             " search over routing-code mutants with full SQLite lineage; (iii) a controlled"
-            " three-axis ablation (topology, archive, operators); and (iv) a mechanistic"
+            " three-axis ablation (topology, archive, operators), replicated over five seeds;"
+            " and (iv) a mechanistic"
             f" deconstruction of the discovered champion policy {CHAMPION_HASH}, which never calls"
             " the frontier tier yet dominates every hand-designed baseline on the quality--cost"
             " frontier."
@@ -268,13 +307,25 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " \\texttt{select\\_model(q)}. Token prices $p^{\\mathrm{in}},p^{\\mathrm{out}}$ per"
             " tier are $(0.15,0.60)$, $(0.80,3.20)$, $(3.00,15.00)$ USD per million tokens:"
         ),
-        "\\begin{equation} C(q,m)=\\frac{t^{\\mathrm{in}}_q\\,p^{\\mathrm{in}}_m +"
-        " t^{\\mathrm{out}}_q\\,p^{\\mathrm{out}}_m}{10^{6}}, \\qquad"
-        " \\Delta C_\\pi = 100\\,\\frac{C_{\\mathrm{ref}}-\\mathbb{E}_q[C(q,\\pi(q))]}{C_{\\mathrm{ref}}},"
-        " \\quad C_{\\mathrm{ref}}=\\mathbb{E}_q[C(q,\\mathrm{frontier})]. \\end{equation}",
-        "\\begin{equation} Q_\\pi = \\mathbb{E}_q[\\mathrm{qual}(q,\\pi(q))], \\qquad"
-        " F(\\pi) = 100\\,Q_\\pi + 0.6\\,\\Delta C_\\pi - 0.05\\,L_\\pi - 300\\,"
-        "\\mathbf{1}[L_\\pi > 100\\,\\mu\\mathrm{s}], \\end{equation}",
+        "\\begin{equation}",
+        "  C(q,m)=\\frac{t^{\\mathrm{in}}_q\\,p^{\\mathrm{in}}_m +"
+        " t^{\\mathrm{out}}_q\\,p^{\\mathrm{out}}_m}{10^{6}}",
+        "  \\label{eq:cost}",
+        "\\end{equation}",
+        "\\begin{equation}",
+        "  \\Delta C_\\pi = 100\\,\\frac{C_{\\mathrm{ref}}-\\mathbb{E}_q\\big[C(q,\\pi(q))\\big]}{C_{\\mathrm{ref}}},"
+        " \\qquad C_{\\mathrm{ref}}=\\mathbb{E}_q\\big[C(q,\\mathrm{frontier})\\big]",
+        "  \\label{eq:costreduction}",
+        "\\end{equation}",
+        "\\begin{equation}",
+        "  Q_\\pi = \\mathbb{E}_q\\big[\\mathrm{qual}(q,\\pi(q))\\big]",
+        "  \\label{eq:quality}",
+        "\\end{equation}",
+        "\\begin{equation}",
+        "  F(\\pi) = 100\\,Q_\\pi + 0.6\\,\\Delta C_\\pi - 0.05\\,L_\\pi - 300\\,"
+        "\\mathbf{1}\\big[L_\\pi > 100\\,\\mu\\mathrm{s}\\big]",
+        "  \\label{eq:fitness}",
+        "\\end{equation}",
         (
             "where $L_\\pi$ is the mean wall-clock decision time in microseconds. Every candidate"
             " must pass three gates: \\textbf{Gate 1} parses the source with"
@@ -304,7 +355,14 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " condition inversion, grammar synthesis, or two-parent branch crossover -- each"
             " wrapped in a simulated $\\langle$thought$\\rangle$/$\\langle$code$\\rangle$"
             " response with a deterministic fallback generator, and is pruned to the elite"
-            " top-$k$. Every second generation the island best migrates cyclically. In"
+            " top-$k$. The fallback generator is a deliberate design choice, not a limitation:"
+            " it guarantees compute-free, bit-reproducible exploration with zero calls to"
+            " expensive closed LLM APIs, so that every result in this paper regenerates"
+            " identically on a laptop; because mutants already flow through the"
+            " $\\langle$thought$\\rangle$/$\\langle$code$\\rangle$ interface, swapping the"
+            " fallback for LLM-in-the-loop mutation \\cite{elm,funsearch} is a drop-in change"
+            " we leave to future work. Every second generation the island best migrates"
+            " cyclically. In"
             " parallel, a $6\\times6$ MAP-Elites grid \\cite{mapelites} bins candidates by"
             " quality $\\in[0.40,0.95]$ and cost reduction $\\in[0,100]\\%$, retaining the"
             " fittest policy per cell as a quality-diversity archive; all evaluations, parent"
@@ -350,16 +408,35 @@ def build_paper_tex(data: dict, stats: dict) -> str:
         table1_latex(data["bench"]["results"]),
         (
             "\\paragraph{Ablations.} Table \\ref{tab:ablation} isolates each component under an"
-            " identical 24-evaluations-per-generation budget. (A) A single panmictic population"
-            " reaches marginally higher peak fitness but a 30\\% smaller Pareto frontier --"
-            " islands buy diversity, not peak fitness. (B) MAP-Elites parent sampling from the"
-            " elite grid beats greedy fitness replacement in both final fitness and convergence"
-            " generation. (C) Replacing semantic mutation with random constant jitter delays"
-            " convergence by three generations and strands the search on a local plateau"
-            " (fitness 107.25 for six consecutive generations), confirming that structured,"
-            " thought-guided edits -- not blind threshold noise -- drive the search."
+            " identical 24-evaluations-per-generation budget, with every variant replicated"
+            " over five seeds. The headline finding is a negative result we consider equally"
+            f" informative: mean peak fitness is statistically indistinguishable across all"
+            f" variants (all means within {stats['peak_spread']:.2f} fitness of each other, $\\sigma"
+            f" \\leq 0.43$) -- at this budget the framework, not the configuration, does the"
+            " heavy lifting. Within that envelope, three seed-robust signals emerge."
+            " (C) \\emph{Operators} carry the only convergence effect: semantic mutation"
+            " reaches 95\\% of final fitness in $1.0 \\pm 0.0$ generations versus"
+            f" ${stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['mean']:.1f} \\pm"
+            f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f}$ for random"
+            " constant jitter, dominates the mean elite curve at every generation of the early"
+            " search (+1.40 fitness at generation 1), and yields a tighter, higher-quality"
+            " archive (223 $\\pm$ 8 elites versus 244 $\\pm$ 0 -- jitter-only offspring are all"
+            " novel but none is better), confirming that structured, thought-guided edits --"
+            " not blind threshold noise -- drive efficient search."
+            " (A) \\emph{Topology} leaves peak fitness unchanged (single-population delta"
+            f" {stats['comp']['A_topology_single_vs_islands']['peak_fitness_delta_mean']:+.2f}, within 1$\\sigma$) but cuts"
+            " frontier-size variance by"
+            f" {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}\\%"
+            " ($\\sigma$ 28.2 $\\to$ 9.9 non-dominated policies), stabilizing deployable"
+            " trade-off coverage across reruns. (B) The \\emph{archive} axis is"
+            " fitness-equivalent (MAP-Elites delta"
+            f" {stats['comp']['B_archive_greedy_vs_mapelites']['peak_fitness_delta_mean']:+.2f}, within 1$\\sigma$); its value"
+            " lies in the explicit quality-diversity grid itself -- an inspectable, bounded"
+            " archive of the trade-off surface -- rather than in peak-fitness gains. We report"
+            " these effect sizes with their seeds to guard against the single-seed"
+            " over-interpretation common in evolutionary-computation studies."
         ),
-        table2_latex({r["key"]: r for r in data["abl"]["runs"]}),
+        table2_latex(stats["abl_agg"], data["abl"]["meta"]["seeds"]),
         "\\includegraphics[width=0.85\\linewidth]{fitness_trajectory.png}",
         "",
     ]
@@ -408,23 +485,25 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " absolute numbers will differ on live API traffic, though the \\emph{relative}"
             " baseline ordering and the mechanistic findings depend only on the ordinal"
             " difficulty structure. (ii) Latency $L$ measures policy decision overhead, not"
-            " end-to-end model latency. (iii) Ablations use a single seed; effect sizes of"
-           " $\\pm$0.5 fitness should be replicated across seeds. (iv) The 6$\\times$6 grid is"
+            " end-to-end model latency. (iii) The five-seed replication varies search"
+            " stochasticity only; the corpus itself is a single synthetic draw and should be"
+            " regenerated across corpus seeds. (iv) The 6$\\times$6 grid is"
             " coarse; finer binning may expose additional niches. (v) The OOD shift is"
             " feature-level (extreme tokens, code$\\wedge$math, density), not adversarial."
         ),
         (
-            "\\paragraph{Toward live production traces.} The bridge from synthetic benchmark to"
-            " deployment is a three-stage validation on live traffic: (1)~\\emph{trace replay}"
-            " -- re-scoring anonymized production queries through all three tiers to replace"
-            " the simulated quality model with empirical per-tier quality, then re-running the"
-            " seconds-cheap search on the calibrated corpus; (2)~\\emph{stratified judgment} --"
-            " human or LLM-as-judge comparison of champion versus always-frontier within"
-            " difficulty strata, testing the ordinal quality structure the policy exploits;"
-            " and (3)~\\emph{shadow canary routing} -- mirroring 1--5\\% of traffic to the"
-            " evolved policy while monitoring per-tier quality drift, cost per resolved query,"
-            " and tail latency, with automatic rollback and scheduled re-evolution as model"
-            " prices and capabilities drift."
+            "\\paragraph{Toward live production deployment.} The bridge from synthetic"
+            " benchmark to production proceeds in three concrete stages."
+            " \\textbf{Stage 1 -- Trace Replay on live logs:} re-score anonymized production"
+            " queries through all three tiers to replace the simulated quality model with"
+            " empirical per-tier quality, then re-run the seconds-cheap search on the"
+            " calibrated corpus. \\textbf{Stage 2 -- Stratified Human/LLM Judgment:} within"
+            " each difficulty stratum, compare champion versus always-frontier with human"
+            " raters or an LLM judge, validating the ordinal quality structure the policy"
+            " exploits. \\textbf{Stage 3 -- Shadow Canary Deployment:} mirror 1--5\\% of"
+            " traffic to the evolved policy while monitoring per-tier quality drift, cost per"
+            " resolved query, and tail latency, with automatic rollback and scheduled"
+            " re-evolution as model prices and capabilities drift."
         ),
         (
             "\\paragraph{Conclusion.} Casting LLM routing as evolutionary code search over a"
@@ -436,6 +515,11 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " mutation replacing the fallback generator \\cite{elm,funsearch}, validation on"
             " live RouteLLM-style preference data \\cite{routellm}, and multi-objective"
             " selection directly on the Pareto front \\cite{nsgaii}."
+        ),
+        (
+            "\\paragraph{Competing interests.} The author declares no competing interests."
+            " Correspondence should be addressed to Thomas Gia Vy Day"
+            " (\\texttt{giavytday@gmail.com})."
         ),
         "",
         "\\begin{thebibliography}{9}",
@@ -456,7 +540,7 @@ def build_paper_md(data: dict, stats: dict) -> str:
     md += [
         "# Dynamic Multi-Model LLM Routing via Evolutionary Code Search",
         "",
-        f"*Anonymous -- AI Systems Research Group · generated {b['timestamp']}*",
+        f"*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · generated {b['timestamp']}*",
         "",
         "## Abstract",
         "",
@@ -469,10 +553,14 @@ def build_paper_md(data: dict, stats: dict) -> str:
             f" **{ch['id']['latency_us']:.3f} µs** mean decision latency, retaining"
             f" {stats['quality_retention']*100:.1f}% of frontier quality, generalizing positively OOD"
             f" ({ch['ood']['cost_reduction_pct']:.1f}% cost reduction), and out-running a supervised"
-            f" decision-tree router by {stats['speedup_vs_ml']:.0f}×. Ablations show semantic mutation"
-            f" is the dominant convergence driver ({abs(comp['C_operators_random_vs_semantic']['gen_to_95_delta'])}-generation advantage),"
-            f" MAP-Elites parents beat greedy replacement (+{abs(comp['B_archive_greedy_vs_mapelites']['final_fitness_delta']):.2f} fitness), and island topology"
-            f" buys a {100*(abl['full_island_semantic']['frontier_size']/abl['A_single_population']['frontier_size']-1):.0f}% larger Pareto frontier at negligible peak-fitness cost."
+            f" decision-tree router by {stats['speedup_vs_ml']:.0f}×. Framed as a formal proof of"
+            f" concept for the search methodology and its zero-latency AST-evaluated oracle, the"
+            f" 5-seed ablation suite shows mean peak fitness is robust across topology, archive,"
+            f" and operator ablations (all means within {stats['peak_spread']:.2f}), with semantic"
+            f" mutation the sole convergence signal (Gen→95% 1.0±0.0 vs"
+            f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['mean']:.1f}±{stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f})"
+            f" and islands cutting frontier-size variance by"
+            f" {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}%."
         ),
         "",
         "## 1. Introduction & Related Work",
@@ -532,6 +620,14 @@ def build_paper_md(data: dict, stats: dict) -> str:
             " parent links, thoughts, and gate outcomes."
         ),
         "",
+        (
+            "**The fallback generator is a deliberate design choice, not a limitation:** it"
+            " guarantees compute-free, bit-reproducible exploration with zero calls to closed"
+            " LLM APIs, so every result regenerates identically on a laptop. Because mutants"
+            " already flow through the `<thought>`/`<code>` interface, swapping the fallback"
+            " for LLM-in-the-loop mutation is a drop-in change."
+        ),
+        "",
         "## 4. Empirical Evaluation & Baseline Comparison",
         "",
         "**Table 1: Main Results.**",
@@ -555,24 +651,34 @@ def build_paper_md(data: dict, stats: dict) -> str:
             f" baseline loses 39.6 points ({hw['id']['cost_reduction_pct']:.1f}% → {hw['ood']['cost_reduction_pct']:.1f}%)."
         ),
         "",
-        "**Table 2: Ablation Results** (10 generations, 24 evals/gen, seed 2026).",
+        "**Table 2: Ablation Results** (mean ± std over 5 seeds; 10 generations, 24 evals/gen).",
         "",
-        table2_markdown({r["key"]: r for r in data["abl"]["runs"]}),
+        table2_markdown(stats["abl_agg"]),
         "",
         (
-            "- **A (topology):** single population edges peak fitness"
-            f" ({abl['A_single_population']['final_best_fitness']:.2f} vs"
-            f" {abl['full_island_semantic']['final_best_fitness']:.2f}) but the 3-island model grows a"
-            f" {100*(abl['full_island_semantic']['frontier_size']/abl['A_single_population']['frontier_size']-1):.0f}% larger Pareto frontier (103 vs 79 non-dominated policies)."
+            f"- **Headline:** mean peak fitness is statistically indistinguishable across all"
+            f" variants (all means within {stats['peak_spread']:.2f}, σ ≤ 0.43) — the framework,"
+            f" not the configuration, does the heavy lifting at this budget."
         ),
         (
-            "- **B (archive):** MAP-Elites parent selection beats greedy on final fitness"
-            f" (+{abs(comp['B_archive_greedy_vs_mapelites']['final_fitness_delta']):.2f}) and converges 4 generations earlier to its plateau."
+            "- **C (operators):** the only convergence signal — semantic mutation hits 95% of"
+            f" final fitness in {stats['abl_agg']['full_island_semantic']['gen_to_95pct_final']['mean']:.1f} ±"
+            f" {stats['abl_agg']['full_island_semantic']['gen_to_95pct_final']['std']:.1f} generations vs"
+            f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['mean']:.1f} ±"
+            f" {stats['abl_agg']['C_random_perturbation']['gen_to_95pct_final']['std']:.1f} for random jitter, dominates the mean"
+            " elite curve at every early generation (+1.40 at gen 1), and yields a tighter"
+            " archive (223±8 vs 244±0 elites — jitter-only offspring are all novel, none better)."
         ),
         (
-            "- **C (operators):** random constant jitter plateaus at 107.25 for 6 generations"
-            f" (Gen→95% = {abl['C_random_perturbation']['gen_to_95pct_final']}); semantic mutation reaches 95% of final fitness in"
-            f" generation {abl['full_island_semantic']['gen_to_95pct_final']}."
+            "- **A (topology):** peak-fitness neutral (Δ="
+            f" {stats['comp']['A_topology_single_vs_islands']['peak_fitness_delta_mean']:+.2f}) but islands cut"
+            f" frontier-size variance by {100*(1 - stats['abl_agg']['full_island_semantic']['frontier_size']['std']/stats['abl_agg']['A_single_population']['frontier_size']['std']):.0f}%"
+            " (σ 28.2 → 9.9), stabilizing trade-off coverage across reruns."
+        ),
+        (
+            "- **B (archive):** fitness-equivalent (Δ="
+            f" {stats['comp']['B_archive_greedy_vs_mapelites']['peak_fitness_delta_mean']:+.2f}); the value of MAP-Elites is the"
+            " inspectable quality-diversity grid itself, not peak fitness."
         ),
         "",
         "![Fitness Trajectory](fitness_trajectory.png)",
@@ -614,21 +720,22 @@ def build_paper_md(data: dict, stats: dict) -> str:
         "",
         (
             "**Limitations.** Synthetic quality model (no live API calls); latency = policy"
-            " overhead only; single-seed ablations (±0.5 fitness effects need replication);"
-            " coarse 6×6 grid; feature-level OOD shift, not adversarial."
+            " overhead only; the 5-seed replication varies search stochasticity only — the"
+            " corpus itself is a single synthetic draw; coarse 6×6 grid; feature-level OOD"
+            " shift, not adversarial."
         ),
         "",
         (
-            "**Toward live production traces.** The bridge to deployment is three-stage"
-            " validation on live traffic: (1) *trace replay* — re-scoring anonymized production"
-            " queries through all three tiers to replace the simulated quality model with"
-            " empirical per-tier quality, then re-running the seconds-cheap search on the"
-            " calibrated corpus; (2) *stratified judgment* — human or LLM-as-judge comparison"
-            " of champion vs always-frontier within difficulty strata, testing the ordinal"
-            " quality structure the policy exploits; (3) *shadow canary routing* — mirroring"
-            " 1–5% of traffic to the evolved policy while monitoring per-tier quality drift,"
-            " cost per resolved query, and tail latency, with automatic rollback and scheduled"
-            " re-evolution as model prices and capabilities drift."
+            "**Toward live production deployment.** Three concrete stages:"
+            " **Stage 1 — Trace Replay on live logs:** re-score anonymized production queries"
+            " through all three tiers, replace the simulated quality model with empirical"
+            " per-tier quality, and re-run the seconds-cheap search on the calibrated corpus."
+            " **Stage 2 — Stratified Human/LLM Judgment:** within each difficulty stratum,"
+            " compare champion vs always-frontier with human raters or an LLM judge, validating"
+            " the ordinal quality structure the policy exploits. **Stage 3 — Shadow Canary"
+            " Deployment:** mirror 1–5% of traffic to the evolved policy while monitoring"
+            " per-tier quality drift, cost per resolved query, and tail latency, with automatic"
+            " rollback and scheduled re-evolution as model prices and capabilities drift."
         ),
         "",
         (
@@ -637,6 +744,11 @@ def build_paper_md(data: dict, stats: dict) -> str:
             " near-zero-latency routers that dominate hand-designed and supervised baselines."
             " Future work: LLM-in-the-loop mutation, live preference-data validation, direct"
             " multi-objective selection."
+        ),
+        "",
+        (
+            "**Competing interests.** The author declares no competing interests."
+            " Correspondence: Thomas Gia Vy Day <giavytday@gmail.com>."
         ),
         "",
         "## References",

@@ -1,10 +1,10 @@
 # Dynamic Multi-Model LLM Routing via Evolutionary Code Search
 
-*Anonymous -- AI Systems Research Group · generated 2026-08-24T17:46:12*
+*Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com · generated 2026-08-24T17:46:12*
 
 ## Abstract
 
-We reframe LLM router design as program search: routing policies are executable Python functions evolved by a 3-island MAP-Elites genetic search and validated by a deterministic 3-gate oracle (AST security, smoke tests, vectorized benchmark with a hard 100 µs latency penalty). Without any LLM-in-the-loop calls, the search discovers a policy delivering **81.4% cost reduction** vs always-frontier routing at **0.138 µs** mean decision latency, retaining 82.0% of frontier quality, generalizing positively OOD (85.5% cost reduction), and out-running a supervised decision-tree router by 489×. Ablations show semantic mutation is the dominant convergence driver (3-generation advantage), MAP-Elites parents beat greedy replacement (+0.34 fitness), and island topology buys a 85% larger Pareto frontier at negligible peak-fitness cost.
+We reframe LLM router design as program search: routing policies are executable Python functions evolved by a 3-island MAP-Elites genetic search and validated by a deterministic 3-gate oracle (AST security, smoke tests, vectorized benchmark with a hard 100 µs latency penalty). Without any LLM-in-the-loop calls, the search discovers a policy delivering **81.4% cost reduction** vs always-frontier routing at **0.138 µs** mean decision latency, retaining 82.0% of frontier quality, generalizing positively OOD (85.5% cost reduction), and out-running a supervised decision-tree router by 489×. Framed as a formal proof of concept for the search methodology and its zero-latency AST-evaluated oracle, the 5-seed ablation suite shows mean peak fitness is robust across topology, archive, and operator ablations (all means within 0.17), with semantic mutation the sole convergence signal (Gen→95% 1.0±0.0 vs 1.6±1.3) and islands cutting frontier-size variance by 65%.
 
 ## 1. Introduction & Related Work
 
@@ -21,6 +21,8 @@ A policy `select_model(q) -> {small, medium, frontier}` is scored by Q = E[quali
 ## 3. Evolutionary Search & MAP-Elites Topology
 
 3 islands × 14 policies; 8 offspring/island/generation via fitness tournament + semantic mutation (constant jitter, comparison flips, branch rotation, condition inversion, grammar synthesis, crossover), each wrapped in simulated `<thought>`/`<code>` with a deterministic fallback; 15% grammar-template immigrants; cyclic best-policy migration every 2 generations; 6×6 MAP-Elites grid over (quality × ΔC); every evaluation persisted to `evolution_search.db` with parent links, thoughts, and gate outcomes.
+
+**The fallback generator is a deliberate design choice, not a limitation:** it guarantees compute-free, bit-reproducible exploration with zero calls to closed LLM APIs, so every result regenerates identically on a laptop. Because mutants already flow through the `<thought>`/`<code>` interface, swapping the fallback for LLM-in-the-loop mutation is a drop-in change.
 
 ## 4. Empirical Evaluation & Baseline Comparison
 
@@ -45,20 +47,21 @@ The supervised decision tree collapses to always-frontier imitation (Q=0.7203, �
 
 **OOD robustness.** Champion ΔC *rises* to 85.46% under shift; the hand-written baseline loses 39.6 points (72.4% → 32.8%).
 
-**Table 2: Ablation Results** (10 generations, 24 evals/gen, seed 2026).
+**Table 2: Ablation Results** (mean ± std over 5 seeds; 10 generations, 24 evals/gen).
 
-| Axis | Variant | Final Fitness | Gen→95% | Gen>Base | Frontier \|E\| | Grid Cells |
+| Axis | Variant | Peak Fitness | Gen→95% | Gen>Base | Elites | Cells |
 |---|---|---|---|---|---|---|
-| A (topology) | Single population | 108.14 | 1 | 1 | 74 | 12 |
-| A (topology) | 3-island + migration (full) | 107.75 | 1 | 1 | 137 | 12 |
-| B (archive) | Greedy fitness replacement | 107.75 | 1 | 1 | 105 | 0 |
-| B (archive) | 2D MAP-Elites parents | 108.09 | 1 | 1 | 102 | 11 |
-| C (operators) | Random constant jitter | 107.25 | 4 | 1 | 124 | 11 |
-| C (operators) | Semantic mutation (full) | 107.75 | 1 | 1 | 137 | 12 |
+| A (topology) | Single population | 107.87 ± 0.36 | 1.0 ± 0.00 | 1.0 ± 0.00 | 220.0 ± 7.25 | 12.6 ± 0.89 |
+| A (topology) | 3-island + migration (full) | 107.85 ± 0.30 | 1.0 ± 0.00 | 1.0 ± 0.00 | 223.2 ± 7.73 | 12.8 ± 0.45 |
+| B (archive) | Greedy fitness replacement | 107.89 ± 0.26 | 1.0 ± 0.00 | 1.0 ± 0.00 | 222.6 ± 6.66 | 0.0 ± 0.00 |
+| B (archive) | 2D MAP-Elites parents | 107.79 ± 0.34 | 1.0 ± 0.00 | 1.0 ± 0.00 | 222.6 ± 5.32 | 12.2 ± 0.84 |
+| C (operators) | Random constant jitter | 107.72 ± 0.43 | 1.6 ± 1.34 | 1.0 ± 0.00 | 244.0 ± 0.00 | 10.6 ± 0.55 |
+| C (operators) | Semantic mutation (full) | 107.85 ± 0.30 | 1.0 ± 0.00 | 1.0 ± 0.00 | 223.2 ± 7.73 | 12.8 ± 0.45 |
 
-- **A (topology):** single population edges peak fitness (108.14 vs 107.75) but the 3-island model grows a 85% larger Pareto frontier (103 vs 79 non-dominated policies).
-- **B (archive):** MAP-Elites parent selection beats greedy on final fitness (+0.34) and converges 4 generations earlier to its plateau.
-- **C (operators):** random constant jitter plateaus at 107.25 for 6 generations (Gen→95% = 4); semantic mutation reaches 95% of final fitness in generation 1.
+- **Headline:** mean peak fitness is statistically indistinguishable across all variants (all means within 0.17, σ ≤ 0.43) — the framework, not the configuration, does the heavy lifting at this budget.
+- **C (operators):** the only convergence signal — semantic mutation hits 95% of final fitness in 1.0 ± 0.0 generations vs 1.6 ± 1.3 for random jitter, dominates the mean elite curve at every early generation (+1.40 at gen 1), and yields a tighter archive (223±8 vs 244±0 elites — jitter-only offspring are all novel, none better).
+- **A (topology):** peak-fitness neutral (Δ= -0.03) but islands cut frontier-size variance by 65% (σ 28.2 → 9.9), stabilizing trade-off coverage across reruns.
+- **B (archive):** fitness-equivalent (Δ= -0.10); the value of MAP-Elites is the inspectable quality-diversity grid itself, not peak fitness.
 
 ![Fitness Trajectory](fitness_trajectory.png)
 
@@ -81,11 +84,13 @@ Simplified semantics: **math → medium; non-math ≤367 tokens → medium; long
 
 ## 6. Limitations, OOD Generalization, & Conclusion
 
-**Limitations.** Synthetic quality model (no live API calls); latency = policy overhead only; single-seed ablations (±0.5 fitness effects need replication); coarse 6×6 grid; feature-level OOD shift, not adversarial.
+**Limitations.** Synthetic quality model (no live API calls); latency = policy overhead only; the 5-seed replication varies search stochasticity only — the corpus itself is a single synthetic draw; coarse 6×6 grid; feature-level OOD shift, not adversarial.
 
-**Toward live production traces.** The bridge to deployment is three-stage validation on live traffic: (1) *trace replay* — re-scoring anonymized production queries through all three tiers to replace the simulated quality model with empirical per-tier quality, then re-running the seconds-cheap search on the calibrated corpus; (2) *stratified judgment* — human or LLM-as-judge comparison of champion vs always-frontier within difficulty strata, testing the ordinal quality structure the policy exploits; (3) *shadow canary routing* — mirroring 1–5% of traffic to the evolved policy while monitoring per-tier quality drift, cost per resolved query, and tail latency, with automatic rollback and scheduled re-evolution as model prices and capabilities drift.
+**Toward live production deployment.** Three concrete stages: **Stage 1 — Trace Replay on live logs:** re-score anonymized production queries through all three tiers, replace the simulated quality model with empirical per-tier quality, and re-run the seconds-cheap search on the calibrated corpus. **Stage 2 — Stratified Human/LLM Judgment:** within each difficulty stratum, compare champion vs always-frontier with human raters or an LLM judge, validating the ordinal quality structure the policy exploits. **Stage 3 — Shadow Canary Deployment:** mirror 1–5% of traffic to the evolved policy while monitoring per-tier quality drift, cost per resolved query, and tail latency, with automatic rollback and scheduled re-evolution as model prices and capabilities drift.
 
 **Conclusion.** Evolutionary code search over a deterministic oracle produces auditable, near-zero-latency routers that dominate hand-designed and supervised baselines. Future work: LLM-in-the-loop mutation, live preference-data validation, direct multi-objective selection.
+
+**Competing interests.** The author declares no competing interests. Correspondence: Thomas Gia Vy Day <giavytday@gmail.com>.
 
 ## References
 

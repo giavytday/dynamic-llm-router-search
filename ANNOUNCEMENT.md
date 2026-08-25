@@ -14,6 +14,8 @@ reduction rises to **85.5%** · champion `22e2a1f5`, 12 lines of Python, frontie
 > 81.4% cost cut vs always-frontier. 0.138µs per decision — 490× faster than a decision-tree router. Under distribution shift, savings RISE to 85.5%.
 >
 > It never calls the frontier tier. No embeddings. No GPU. A 3-gate oracle + MAP-Elites over code.
+>
+> — Thomas Gia Vy Day (@giavytday · giavytday@gmail.com)
 
 ## 2. LinkedIn post
 
@@ -45,6 +47,8 @@ reduction rises to **85.5%** · champion `22e2a1f5`, 12 lines of Python, frontie
 > Paper (PDF + LaTeX), figures, ablation suite, and one-command reproduction (`./reproduce.sh`)
 > are MIT-licensed in the repo. Comments and critique welcome — especially on the live-trace
 > validation protocol in Section 6.
+>
+> — Thomas Gia Vy Day · Independent Researcher · giavytday@gmail.com
 
 ## 3. Blog post (~500 words) — Hugging Face Papers / Substack format
 
@@ -82,15 +86,19 @@ scikit-learn decision-tree router we trained for comparison. That baseline is th
 trained to imitate the quality-optimal tier, it collapses to near always-frontier behavior (0.5%
 cost reduction) at 67.6µs per query — dominated on every axis.
 
-Ablations sharpen the story: random constant jitter strands search on a six-generation fitness
-plateau; MAP-Elites parents beat greedy replacement on fitness and convergence; islands trade a
-sliver of peak fitness for a 30% larger Pareto frontier of deployable policies.
+We replicated every ablation over five seeds. The honest headline: mean peak fitness is
+statistically indistinguishable across topology, archive, and operator variants (all means within
+0.17 fitness) — the framework, not the configuration, does the heavy lifting. The seed-robust
+signals: semantic mutation is the only convergence effect (95%-of-final in 1.0±0.0 generations vs
+1.6±1.3 for random jitter), and island topology cuts frontier-size variance by 65%.
 
 The caveats are real: the quality model is synthetic, latency measures the router rather than the
-model, and single-seed ablations need replication. But the pipeline — oracle, search, lineage,
+model, and the corpus is a single synthetic draw. But the pipeline — oracle, search, lineage,
 figures, even the LaTeX paper — regenerates from one command (`./reproduce.sh`), which is exactly
 what you want before spending money on live traces: replay production queries, recalibrate,
 re-evolve in seconds, canary at 1–5% of traffic.
 
 Code, paper, and full lineage database are MIT-licensed. Next time someone proposes a neural
 router, ask a simple question first: what would evolution find?
+
+*— Thomas Gia Vy Day (Independent Researcher) · giavytday@gmail.com*

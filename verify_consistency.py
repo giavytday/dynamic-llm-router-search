@@ -65,9 +65,18 @@ def main() -> int:
             pat,
         )
 
-    for run in data["abl"]["runs"]:
-        v = f"{run['final_best_fitness']:.2f}"
-        check(f"Table 2 fitness {v} present in PAPER.md ({run['key']})", v in md_shipped)
+    for key, aggrec in data["abl"]["aggregates"].items():
+        v = f"{aggrec['peak_fitness']['mean']:.2f}"
+        s = f"{aggrec['peak_fitness']['std']:.2f}"
+        check(
+            f"Table 2 peak-fitness mean±std {v} ± {s} in PAPER.md ({key})",
+            v in md_shipped and s in md_shipped and "±" in md_shipped,
+        )
+        g95 = f"{aggrec['gen_to_95pct_final']['mean']:.1f}"
+        check(
+            f"Table 2 gen→95% mean {g95} in PAPER.md ({key})",
+            g95 in md_shipped,
+        )
 
     for token in (
         f"{ch['id']['cost_reduction_pct']:.1f}",

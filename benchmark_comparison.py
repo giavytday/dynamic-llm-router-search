@@ -7,10 +7,6 @@ import sys
 import time
 from typing import Callable, Dict, List
 
-import matplotlib
-
-matplotlib.use("Agg")
-
 from dataset import generate_synthetic_dataset, split_dataset
 from engine import SearchEngine  # noqa: F401  (ensures schema compatibility on import)
 from mutator import INITIAL_BASELINE_CODE
@@ -165,60 +161,9 @@ def main() -> None:
             f" {r['n_params']} & {r['memory_kb']:.2f}\\\\"
         )
     print("\\bottomrule\\end{tabular}\\end{table}")
-
-    chart(results, "baseline_vs_champion.png")
-    print("saved baseline_vs_champion.png")
-
-
-def chart(results: List[Dict[str, object]], out_path: str) -> None:
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    names = [SHORT_NAMES[r["method"]] for r in results]
-    champion_idx = names.index("Champion")
-    x = np.arange(len(names))
-    w = 0.38
-
-    def bar_colors(ood: bool) -> List[str]:
-        return [
-            "#c62828" if i == champion_idx else ("#ef9a9a" if ood else "#90caf9")
-            for i in range(len(names))
-        ]
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.6))
-
-    id_q = [r["id"]["quality"] for r in results]
-    ood_q = [r["ood"]["quality"] for r in results]
-    ax1.bar(x - w / 2, id_q, w, color=bar_colors(False), label="ID (train)")
-    ax1.bar(x + w / 2, ood_q, w, color=bar_colors(True), label="OOD shift")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(names, rotation=28, ha="right", fontsize=9)
-    ax1.set_ylabel(r"Relative Quality $Q$")
-    ax1.set_ylim(0, 0.85)
-    ax1.set_title("Routing Quality")
-    ax1.legend(fontsize=9)
-
-    id_c = [r["id"]["cost_reduction_pct"] for r in results]
-    ood_c = [r["ood"]["cost_reduction_pct"] for r in results]
-    ax2.bar(x - w / 2, id_c, w, color=bar_colors(False))
-    ax2.bar(x + w / 2, ood_c, w, color=bar_colors(True))
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(names, rotation=28, ha="right", fontsize=9)
-    ax2.set_ylabel(r"Cost Reduction $\Delta C$ (%)")
-    ax2.set_title("Cost Reduction vs Always-Frontier")
-    ax2.axhline(0.0, color="grey", lw=0.8)
-
-    for ax in (ax1, ax2):
-        ax.grid(axis="y", alpha=0.3)
-        ax.set_axisbelow(True)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-    fig.suptitle("Baseline Routers vs Evolved Champion (Table 1)", fontsize=13, y=1.02)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    print("figure baseline_vs_champion.png is produced by visualize.py")
 
 
 if __name__ == "__main__":
     main()
+

@@ -87,19 +87,23 @@ costing 489× more inference than the champion for a strictly dominated operatin
 
 ## Table 2 · Ablation Study
 
-| Axis | Variant | Final Fitness | Gen→95% | Gen>Base | Frontier \|E\| | Grid Cells |
+| Axis | Variant | Peak Fitness | Gen→95% | Gen>Base | Elites | Cells |
 |---|---|---|---|---|---|---|
-| A (topology) | Single population | 108.14 | 1 | 1 | 79 | 12 |
-| A (topology) | 3-island + migration (full) | 107.75 | 1 | 1 | 103 | 13 |
-| B (archive) | Greedy fitness replacement | 107.90 | 1 | 1 | 109 | 0 |
-| B (archive) | 2D MAP-Elites parents | 108.09 | 1 | 1 | 105 | 11 |
-| C (operators) | Random constant jitter | 107.25 | 4 | 1 | 124 | 11 |
-| C (operators) | Semantic thought-guided (full) | 107.75 | 1 | 1 | 103 | 13 |
+| A (topology) | Single population | 107.87 ± 0.36 | 1.0 ± 0.0 | 1.0 ± 0.0 | 220.0 ± 7.3 | 12.6 ± 0.9 |
+| A (topology) | 3-island + migration (full) | 107.85 ± 0.30 | 1.0 ± 0.0 | 1.0 ± 0.0 | 223.2 ± 7.7 | 12.8 ± 0.5 |
+| B (archive) | Greedy fitness replacement | 107.89 ± 0.26 | 1.0 ± 0.0 | 1.0 ± 0.0 | 222.6 ± 6.7 | 0.0 ± 0.0 |
+| B (archive) | 2D MAP-Elites parents | 107.79 ± 0.34 | 1.0 ± 0.0 | 1.0 ± 0.0 | 222.6 ± 5.3 | 12.2 ± 0.8 |
+| C (operators) | Random constant jitter | 107.72 ± 0.43 | 1.6 ± 1.3 | 1.0 ± 0.0 | 244.0 ± 0.0 | 10.6 ± 0.6 |
+| C (operators) | Semantic thought-guided (full) | 107.85 ± 0.30 | 1.0 ± 0.0 | 1.0 ± 0.0 | 223.2 ± 7.7 | 12.8 ± 0.5 |
 
-Budget-controlled (24 evals/generation, seed 2026). Findings: islands trade −0.39 peak fitness
-for a **+30% larger Pareto frontier**; MAP-Elites parents beat greedy replacement (+0.19 fitness,
-4 generations faster to plateau); semantic mutation is the dominant convergence driver — random
-jitter strands the search on a 6-generation plateau.
+Budget-controlled (24 evals/generation), aggregated as mean ± std over 5 seeds (42, 123, 2026,
+777, 999). Findings: mean peak fitness is statistically indistinguishable across all variants
+(all means within 0.17, σ ≤ 0.43) — the framework, not the configuration, does the heavy lifting.
+Seed-robust signals: **semantic mutation** is the only convergence-axis effect (Gen→95% 1.0±0.0
+vs 1.6±1.3; +1.40 mean fitness at generation 1; tighter archive — 223±8 vs 244±0 elites, since
+jitter-only offspring are all novel but none better); **islands** leave peak fitness neutral
+(Δ=−0.03) but cut frontier-size variance by **65%** (σ 28.2 → 9.9); **MAP-Elites parents** are
+fitness-equivalent (Δ=−0.10), their value being the inspectable quality-diversity grid itself.
 
 ## Champion Policy `22e2a1f5`
 
@@ -153,14 +157,20 @@ reproduce.sh  requirements.txt  LICENSE  README.md
 paper.tex  PAPER.md  *.png  *.json  *.db                  # generated artifacts
 ```
 
+## Author
+
+**Thomas Gia Vy Day** — Independent Researcher
+Contact: [giavytday@gmail.com](mailto:giavytday@gmail.com)
+
 ## Citation
 
 ```bibtex
 @article{evorouting2026,
   title   = {Dynamic Multi-Model {LLM} Routing via Evolutionary Code Search},
-  author  = {{AI Systems Research Group}},
+  author  = {Day, Thomas Gia Vy},
   journal = {Preprint},
   year    = {2026},
+  email   = {giavytday@gmail.com},
   note    = {Champion policy 22e2a1f5: 81.4\% cost reduction at 0.138\,$\mu$s decision latency}
 }
 ```
