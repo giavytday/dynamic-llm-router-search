@@ -139,7 +139,8 @@ def _ms_md(a: dict, fmt: str = "%.2f") -> str:
 
 def table2_latex(abl_agg: Dict[str, dict], seeds: List[int]) -> str:
     lines = [
-        "\\begin{table}[t]\\centering\\small",
+        "\\begin{table}[t]\\centering",
+        "  \\footnotesize\\setlength{\\tabcolsep}{4pt}",
         "\\caption{Ablation results (Table 2), aggregated as $\\mathrm{mean} \\pm \\mathrm{std}$"
         f" over {len(seeds)} seeds ({', '.join(map(str, seeds))}). Budget-controlled: every"
         " variant evaluates 24 offspring per generation for 10 generations. Gen$\\to$95\\%:"
@@ -393,8 +394,28 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             f" quality at {cf*100:.1f}\\% of frontier cost with a single effective decision"
             f" threshold pair."
         ),
-        "\\includegraphics[width=0.85\\linewidth]{baseline_vs_champion.png}",
-        "\\includegraphics[width=0.85\\linewidth]{pareto_frontier.png}",
+        (
+            "Figure \\ref{fig:baseline_comparison} visualizes the Table \\ref{tab:main}"
+            " comparison; Figure \\ref{fig:pareto_frontier} shows the full quality-cost"
+            " Pareto frontier of the archive."
+        ),
+        "\\begin{figure}[htbp]",
+        "  \\centering",
+        "  \\includegraphics[width=0.95\\linewidth]{baseline_vs_champion.png}",
+        "  \\caption{Baseline comparison across in-distribution (ID) and"
+        "   out-of-distribution (OOD) query slices. Left: relative quality $Q$;"
+        "   right: cost reduction $\\Delta C$ versus always-frontier routing. The evolved"
+        "   champion (red) occupies a Pareto-dominant efficiency operating point.}",
+        "  \\label{fig:baseline_comparison}",
+        "\\end{figure}",
+        "\\begin{figure}[htbp]",
+        "  \\centering",
+        "  \\includegraphics[width=0.95\\linewidth]{pareto_frontier.png}",
+        "  \\caption{Pareto frontier of the evolved policy archive over relative quality $Q$"
+        "   and cost reduction $\\Delta C$; points are colored by discovery generation and the"
+        "   star marks the released champion policy.}",
+        "  \\label{fig:pareto_frontier}",
+        "\\end{figure}",
         (
             f"\\paragraph{{Out-of-distribution robustness.}} On the OOD slice the champion's cost"
             f" reduction \\emph{{rises}} to {ch['ood']['cost_reduction_pct']:.2f}\\% (from"
@@ -435,9 +456,18 @@ def build_paper_tex(data: dict, stats: dict) -> str:
             " archive of the trade-off surface -- rather than in peak-fitness gains. We report"
             " these effect sizes with their seeds to guard against the single-seed"
             " over-interpretation common in evolutionary-computation studies."
+            " Figure~\\ref{fig:trajectory} plots the corresponding per-island elite and mean"
+            " fitness trajectories."
         ),
         table2_latex(stats["abl_agg"], data["abl"]["meta"]["seeds"]),
-        "\\includegraphics[width=0.85\\linewidth]{fitness_trajectory.png}",
+        "\\begin{figure}[htbp]",
+        "  \\centering",
+        "  \\includegraphics[width=0.95\\linewidth]{fitness_trajectory.png}",
+        "  \\caption{Search progress per island across ten generations: solid lines show the"
+        "   per-generation elite (best) fitness, dashed lines the mean fitness of newly"
+        "   registered candidates; the dotted line marks the hand-written baseline.}",
+        "  \\label{fig:trajectory}",
+        "\\end{figure}",
         "",
     ]
 

@@ -49,8 +49,19 @@ Search maintains three islands of 14 policies. Each generation, every island pro
 
 \section{Empirical Evaluation and Baseline Comparison}
 Table \ref{tab:main} compares the evolved champion against constant, random, hand-engineered, and supervised (scikit-learn decision tree, DecisionTreeClassifier(max\_depth=8, min\_samples\_leaf=20), train accuracy 0.782) baselines. The supervised router collapses to near always-frontier behavior ($Q=0.7203, \Delta C=0.47\%$): imitating the quality-optimal label does not encode cost pressure, and its per-query scikit-learn inference costs 67.6\,$\mu$s -- 489$\times$ the champion's decision time for a strictly dominated operating point. The evolved champion instead retains 82.0\% of frontier quality at 18.6\% of frontier cost with a single effective decision threshold pair.
-\includegraphics[width=0.85\linewidth]{baseline_vs_champion.png}
-\includegraphics[width=0.85\linewidth]{pareto_frontier.png}
+Figure \ref{fig:baseline_comparison} visualizes the Table \ref{tab:main} comparison; Figure \ref{fig:pareto_frontier} shows the full quality-cost Pareto frontier of the archive.
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{baseline_vs_champion.png}
+  \caption{Baseline comparison across in-distribution (ID) and   out-of-distribution (OOD) query slices. Left: relative quality $Q$;   right: cost reduction $\Delta C$ versus always-frontier routing. The evolved   champion (red) occupies a Pareto-dominant efficiency operating point.}
+  \label{fig:baseline_comparison}
+\end{figure}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{pareto_frontier.png}
+  \caption{Pareto frontier of the evolved policy archive over relative quality $Q$   and cost reduction $\Delta C$; points are colored by discovery generation and the   star marks the released champion policy.}
+  \label{fig:pareto_frontier}
+\end{figure}
 \paragraph{Out-of-distribution robustness.} On the OOD slice the champion's cost reduction \emph{rises} to 85.46\% (from 81.36\%) because hard long-tail queries escalate to medium rather than frontier, while the hand-written baseline sheds 39.6 points of cost efficiency (72.35\% $\to$ 32.77\%). Quality gaps ($\Delta Q$) are positive for the top-50 evolved policies, indicating the search did not overfit the train split's difficulty mix.
 \begin{table}[t]\centering\small
 \caption{Main results (Table 1). ID: in-distribution train split ($n{=}6000$); OOD: distribution-shifted slice ($n{=}832$). Reference cost: always-frontier.}
@@ -67,8 +78,9 @@ ML-Tree & 0.7203 & 0.47 & 0.7761 & -32.56 & 67.624 & 133 & 12.65\\
 Champion & 0.5909 & 81.36 & 0.5912 & 85.46 & 0.138 & 1 & 0.43\\
 \bottomrule\end{tabular}\end{table}
 
-\paragraph{Ablations.} Table \ref{tab:ablation} isolates each component under an identical 24-evaluations-per-generation budget, with every variant replicated over five seeds. The headline finding is a negative result we consider equally informative: mean peak fitness is statistically indistinguishable across all variants (all means within 0.17 fitness of each other, $\sigma \leq 0.43$) -- at this budget the framework, not the configuration, does the heavy lifting. Within that envelope, three seed-robust signals emerge. (C) \emph{Operators} carry the only convergence effect: semantic mutation reaches 95\% of final fitness in $1.0 \pm 0.0$ generations versus $1.6 \pm 1.3$ for random constant jitter, dominates the mean elite curve at every generation of the early search (+1.40 fitness at generation 1), and yields a tighter, higher-quality archive (223 $\pm$ 8 elites versus 244 $\pm$ 0 -- jitter-only offspring are all novel but none is better), confirming that structured, thought-guided edits -- not blind threshold noise -- drive efficient search. (A) \emph{Topology} leaves peak fitness unchanged (single-population delta -0.03, within 1$\sigma$) but cuts frontier-size variance by 65\% ($\sigma$ 28.2 $\to$ 9.9 non-dominated policies), stabilizing deployable trade-off coverage across reruns. (B) The \emph{archive} axis is fitness-equivalent (MAP-Elites delta -0.10, within 1$\sigma$); its value lies in the explicit quality-diversity grid itself -- an inspectable, bounded archive of the trade-off surface -- rather than in peak-fitness gains. We report these effect sizes with their seeds to guard against the single-seed over-interpretation common in evolutionary-computation studies.
-\begin{table}[t]\centering\small
+\paragraph{Ablations.} Table \ref{tab:ablation} isolates each component under an identical 24-evaluations-per-generation budget, with every variant replicated over five seeds. The headline finding is a negative result we consider equally informative: mean peak fitness is statistically indistinguishable across all variants (all means within 0.17 fitness of each other, $\sigma \leq 0.43$) -- at this budget the framework, not the configuration, does the heavy lifting. Within that envelope, three seed-robust signals emerge. (C) \emph{Operators} carry the only convergence effect: semantic mutation reaches 95\% of final fitness in $1.0 \pm 0.0$ generations versus $1.6 \pm 1.3$ for random constant jitter, dominates the mean elite curve at every generation of the early search (+1.40 fitness at generation 1), and yields a tighter, higher-quality archive (223 $\pm$ 8 elites versus 244 $\pm$ 0 -- jitter-only offspring are all novel but none is better), confirming that structured, thought-guided edits -- not blind threshold noise -- drive efficient search. (A) \emph{Topology} leaves peak fitness unchanged (single-population delta -0.03, within 1$\sigma$) but cuts frontier-size variance by 65\% ($\sigma$ 28.2 $\to$ 9.9 non-dominated policies), stabilizing deployable trade-off coverage across reruns. (B) The \emph{archive} axis is fitness-equivalent (MAP-Elites delta -0.10, within 1$\sigma$); its value lies in the explicit quality-diversity grid itself -- an inspectable, bounded archive of the trade-off surface -- rather than in peak-fitness gains. We report these effect sizes with their seeds to guard against the single-seed over-interpretation common in evolutionary-computation studies. Figure~\ref{fig:trajectory} plots the corresponding per-island elite and mean fitness trajectories.
+\begin{table}[t]\centering
+  \footnotesize\setlength{\tabcolsep}{4pt}
 \caption{Ablation results (Table 2), aggregated as $\mathrm{mean} \pm \mathrm{std}$ over 5 seeds (42, 123, 2026, 777, 999). Budget-controlled: every variant evaluates 24 offspring per generation for 10 generations. Gen$\to$95\%: first generation reaching 95\% of the run-final best fitness; Elites: unique passing candidates in the run archive; Cells: occupied MAP-Elites grid cells.}
 \label{tab:ablation}
 \begin{tabular}{llrrrrr}\toprule
@@ -81,7 +93,12 @@ C (operators) & Random constant jitter & $107.72 \pm 0.43$ & $1.6 \pm 1.34$ & $1
 C (operators) & Semantic mutation (full) & $107.85 \pm 0.30$ & $1.0 \pm 0.00$ & $1.0 \pm 0.00$ & $223.2 \pm 7.73$ & $12.8 \pm 0.45$\\
 \bottomrule\end{tabular}\end{table}
 
-\includegraphics[width=0.85\linewidth]{fitness_trajectory.png}
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{fitness_trajectory.png}
+  \caption{Search progress per island across ten generations: solid lines show the   per-generation elite (best) fitness, dashed lines the mean fitness of newly   registered candidates; the dotted line marks the hand-written baseline.}
+  \label{fig:trajectory}
+\end{figure}
 
 \section{Mechanistic Deconstruction of Champion Policy 22e2a1f5}
 The champion (generation 10, island 2, parent \texttt{7f11eb26}, operator \texttt{tweak\_constants}, fitness 107.90) is:
